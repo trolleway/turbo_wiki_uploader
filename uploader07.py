@@ -13,9 +13,9 @@ from exif import Image as ExifImage
 from exif_helper import ExifReader
 import requests
 
-ORG_NAME = "MyWikimediaTools"
-APP_NAME = "CommonsUploader"
-#TODO: rename
+ORG_NAME = "trolleway"
+APP_NAME = "turbo_wiki_uploader"
+
 
 class UploadThread(QThread):
     log_signal = pyqtSignal(str)
@@ -336,6 +336,10 @@ class UploaderWindow(QWidget):
     def select_file(self):
         fname, _ = QFileDialog.getOpenFileName(self, 'Open file', '.', "Image files (*.jpg *.jpeg *.png)")
         if fname:
+            #from PyQt6.QtCore import QSettings
+            #settings = QSettings(ORG_NAME, APP_NAME)
+            #settings.setValue("username", username)
+        
             self.file_path = fname
             self.file_label.setText(fname.split('/')[-1])
             self.upload_btn.setEnabled(True)
