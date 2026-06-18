@@ -19,6 +19,8 @@ from PyQt6.QtCore import QSettings
 ORG_NAME = "trolleway"
 APP_NAME = "turbo_wiki_uploader"
 
+YELLOW4FORM = '#edf8b1'
+
 
 class UploadThread(QThread):
     log_signal = pyqtSignal(str)
@@ -252,11 +254,13 @@ class UploaderWindow(QWidget):
 
         self.filename_input = QLineEdit(self)
         self.filename_input.setPlaceholderText('Target Filename (e.g., MyPhoto.jpg)')
+        self.filename_input.setStyleSheet(f"background-color: {YELLOW4FORM}; color: #ffffff;")
         layout.addWidget(self.filename_input)
 
         self.desc_input = QTextEdit(self)
         self.desc_input.setPlaceholderText('Description')
         self.desc_input.setMaximumHeight(100)
+        self.desc_input.setStyleSheet(f"background-color: {YELLOW4FORM}; color: #ffffff;")
         layout.addWidget(self.desc_input)
 
         self.upload_btn = QPushButton('Upload', self)
