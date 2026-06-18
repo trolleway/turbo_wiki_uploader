@@ -1,0 +1,5 @@
+PyQt6==6.7.1
+requests==2.32.3
+requests-oauthlib 
+pyinstaller
+exif
