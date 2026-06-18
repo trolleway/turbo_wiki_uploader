@@ -12,6 +12,9 @@ import keyring
 from exif import Image as ExifImage
 from exif_helper import ExifReader
 import requests
+import os
+
+from PyQt6.QtCore import QSettings
 
 ORG_NAME = "trolleway"
 APP_NAME = "turbo_wiki_uploader"
@@ -334,11 +337,12 @@ class UploaderWindow(QWidget):
         self.setLayout(layout)
         self.load_credentials()
     def select_file(self):
-        fname, _ = QFileDialog.getOpenFileName(self, 'Open file', '.', "Image files (*.jpg *.jpeg *.png)")
+        settings = QSettings(ORG_NAME, APP_NAME)
+        saved_file_dir = settings.value("file_dir", ".") # Default to dot   
+        fname, _ = QFileDialog.getOpenFileName(self, 'Open file', saved_file_dir, "Image files (*.jpg *.jpeg *.png)")
         if fname:
-            #from PyQt6.QtCore import QSettings
-            #settings = QSettings(ORG_NAME, APP_NAME)
-            #settings.setValue("username", username)
+            
+            settings.setValue("file_dir",  os.path.dirname(fname))
         
             self.file_path = fname
             self.file_label.setText(fname.split('/')[-1])
