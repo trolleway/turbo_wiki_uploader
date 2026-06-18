@@ -20,6 +20,66 @@ ORG_NAME = "trolleway"
 APP_NAME = "turbo_wiki_uploader"
 
 YELLOW4FORM = '#edf8b1'
+BLACK4FORM = "#000000"
+GRAY4FORM = "#8B8B8BFF"
+
+class DescriptionGenerationThread(QThread):
+    """
+    Background thread to extract EXIF and generate 
+    the Wikitext template without freezing the UI.
+    """
+    # Define a signal to send the final text back to the main thread
+    description_generated = pyqtSignal(str)
+    log_signal = pyqtSignal(str) # To report any internal coordinates
+
+    def __init__(self, file_path, username):
+        super().__init__()
+        self.file_path = file_path
+        self.username = username
+
+    def run(self):
+        try:
+            if not self.file_path:
+                return
+
+            exif_helper = ExifReader()
+            exifdata = exif_helper.get_exif_data(self.file_path)
+            
+            if exifdata['lat'] and exifdata['lon']:
+                self.log_signal.emit(f"Coords: {exifdata['lat']:.4f}, {exifdata['lon']:.4f}.")
+                
+            str_heading = ''
+            if exifdata['heading'] is not None:
+                str_heading = f"|heading:{exifdata['heading']}"
+
+            # Construct the Wikitext template string
+            description = f"""== {{int:filedesc}} ==
+{{{{Information
+|other_fields_1 =
+{{{{Information field
+
+ |name  = {{{{Label|P1071|link=-|capitalization=ucfirst}}}}
+ |value = {{{{#invoke:Information|SDC_Location|icon=true}}}} {{{{#if:{{{{#property:P1071|from=M{{{{PAGEID}}}} }}}}}}|(<small>{{{{#invoke:PropertyChain|PropertyChain|qID={{{{#invoke:WikidataIB |followQid |props=P1071}}}}|pID=P131|endpID=P17}}}}</small>)}}}} }}}}
+{{{{Information field
+
+ |name  = {{{{Label|P180|link=-|capitalization=ucfirst}}}}
+ |value = {{{{#property:P180|from=M{{{{PAGEID}}}} }}}} }}}} 
+|date={{{{Taken on|{exifdata['dt_iso']}|source=EXIF}}}}
+|author=[[User:{self.username}|{self.username}]]
+}}}}
+{{{{Location dec|{exifdata['lat']}|{exifdata['lon']}{str_heading}}}}}
+
+== {{int:license-header}} ==
+{{{{self|cc-by-4.0}}}}
+
+[[Category:Uploaded with Turbo Wiki Uploader]]
+[[Category:Photographs by {self.username}]]"""
+
+            # Emit the text back to the main UI
+            self.description_generated.emit(description)
+
+        except Exception as e:
+            self.log_signal.emit(f"Error generating description: {str(e)}")
 
 
 class UploadThread(QThread):
@@ -219,127 +279,160 @@ class UploaderWindow(QWidget):
 
     def initUI(self):
         self.setWindowTitle('Wikimedia Commons Uploader (PyQt6 + mwclient)')
-        self.setGeometry(100, 100, 400, 500)
+        self.setGeometry(100, 100, 800, 600)
         
-        layout = QVBoxLayout()
+        main_layout = QHBoxLayout()
+        left_layout = QVBoxLayout()
 
         self.user_input = QLineEdit(self)
         self.user_input.setPlaceholderText('Username')
-        layout.addWidget(self.user_input)
+        left_layout.addWidget(self.user_input)
 
         self.pass_input = QLineEdit(self)
         self.pass_input.setPlaceholderText('Password')
         self.pass_input.setEchoMode(QLineEdit.EchoMode.Password)
-        layout.addWidget(self.pass_input)
+        left_layout.addWidget(self.pass_input)
 
         self.file_btn = QPushButton('Select Photo', self)
         self.file_btn.clicked.connect(self.select_file)
-        layout.addWidget(self.file_btn)
+        left_layout.addWidget(self.file_btn)
 
         self.file_label = QLabel('No file selected', self)
-        layout.addWidget(self.file_label)
+        left_layout.addWidget(self.file_label)
         
         self.image_label = QLabel('▭', self)
         self.image_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         # Give the label a border to easily see the bounding area
         self.image_label.setStyleSheet("border: 1px dashed #aaa;") 
-        layout.addWidget(self.image_label)
+        left_layout.addWidget(self.image_label)
         
         # Hyperlink label (Simple text link)
         self.link_label = QLabel('', self)
         self.link_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         # Allows QLabel to automatically open local file URLs in the system viewer
         self.link_label.setOpenExternalLinks(True) 
-        layout.addWidget(self.link_label)
-
-        self.filename_input = QLineEdit(self)
-        self.filename_input.setPlaceholderText('Target Filename (e.g., MyPhoto.jpg)')
-        self.filename_input.setStyleSheet(f"background-color: {YELLOW4FORM}; color: #ffffff;")
-        layout.addWidget(self.filename_input)
-
-        self.desc_input = QTextEdit(self)
-        self.desc_input.setPlaceholderText('Description')
-        self.desc_input.setMaximumHeight(100)
-        self.desc_input.setStyleSheet(f"background-color: {YELLOW4FORM}; color: #ffffff;")
-        layout.addWidget(self.desc_input)
-
-        self.upload_btn = QPushButton('Upload', self)
-        self.upload_btn.clicked.connect(self.start_upload)
-        self.upload_btn.setEnabled(False)
-        layout.addWidget(self.upload_btn)
+        left_layout.addWidget(self.link_label)
 
         self.log_output = QTextEdit(self)
         self.log_output.setReadOnly(True)
-        layout.addWidget(self.log_output)
+        left_layout.addWidget(self.log_output)
         
-        layout.addWidget(QLabel("<b>Location (Wikidata Entity):</b>"))
+        left_layout.addWidget(QLabel("<b>Location (Wikidata Entity):</b>"))
         self.search_input_location = QLineEdit()
         self.search_input_location.setPlaceholderText("Type to search (e.g., 'Eiffel Tower', 'Abbey road')...")
         self.search_input_location.textChanged.connect(self.on_text_changed_location)
-        layout.addWidget(self.search_input_location)
+        left_layout.addWidget(self.search_input_location)
 
         # Suggestions List (Hidden by default)
         self.suggestions_list_location = QListWidget()
         self.suggestions_list_location.setVisible(False)
         self.suggestions_list_location.setMaximumHeight(150)
         self.suggestions_list_location.itemClicked.connect(self.add_entity_from_suggestion_location)
-        layout.addWidget(self.suggestions_list_location)
+        left_layout.addWidget(self.suggestions_list_location)
  
         # Selected Entities List
         self.selected_list_location_widget = QListWidget()
         self.selected_list_location_widget.setSelectionMode(QAbstractItemView.SelectionMode.NoSelection)
         # Apply some styling to make it look like a list of tags
-        self.selected_list_location_widget.setStyleSheet("""
-            QListWidget {
-                background-color: #f0f0f0;
+        self.selected_list_location_widget.setStyleSheet(f"""
+            QListWidget {{
+                background-color: {YELLOW4FORM};
                 border: 1px solid #ccc;
                 border-radius: 4px;
-            }
-            QListWidget::item {
+            }}
+            QListWidget::item {{
                 border-bottom: 1px solid #e0e0e0;
                 padding: 5px;
-            }
+            }}
+
         """)
-        layout.addWidget(QLabel("Selected Location:"))
-        layout.addWidget(self.selected_list_location_widget)
+        left_layout.addWidget(QLabel("Selected Location:"))
+        left_layout.addWidget(self.selected_list_location_widget)
 
  
         
-        layout.addWidget(QLabel("<b>Depicts (Wikidata Entities):</b>"))
+        left_layout.addWidget(QLabel("<b>Depicts (Wikidata Entities):</b>"))
 
         #  Search Input
         self.search_input = QLineEdit()
         self.search_input.setPlaceholderText("Type to search (e.g., 'Cat')...")
         self.search_input.textChanged.connect(self.on_text_changed)
-        layout.addWidget(self.search_input)
+        left_layout.addWidget(self.search_input)
 
         # Suggestions List (Hidden by default)
         self.suggestions_list = QListWidget()
         self.suggestions_list.setVisible(False)
         self.suggestions_list.setMaximumHeight(150)
         self.suggestions_list.itemClicked.connect(self.add_entity_from_suggestion)
-        layout.addWidget(self.suggestions_list)
+        left_layout.addWidget(self.suggestions_list)
 
         # 4. Selected Entities List
         self.selected_list_widget = QListWidget()
         self.selected_list_widget.setSelectionMode(QAbstractItemView.SelectionMode.NoSelection)
         # Apply some styling to make it look like a list of tags
-        self.selected_list_widget.setStyleSheet("""
-            QListWidget {
-                background-color: #f0f0f0;
+        self.selected_list_widget.setStyleSheet(f"""
+            QListWidget {{
+                background-color: {YELLOW4FORM};
                 border: 1px solid #ccc;
                 border-radius: 4px;
-            }
-            QListWidget::item {
+            }}
+            QListWidget::item {{
                 border-bottom: 1px solid #e0e0e0;
                 padding: 5px;
-            }
-        """)
-        layout.addWidget(QLabel("Selected Entities:"))
-        layout.addWidget(self.selected_list_widget)
+            }}
 
-        self.setLayout(layout)
+        """)
+        #self.selected_list_widget.setStyleSheet("QListWidget { background-color: "+ YELLOW4FORM+"; color: white; }")
+        #self.desc_input.setStyleSheet(f"background-color: {YELLOW4FORM}; color: {BLACK4FORM}; placeholder-text-color: {GRAY4FORM};")
+        left_layout.addWidget(QLabel("Selected Entities:"))
+        left_layout.addWidget(self.selected_list_widget)
+        
+
+
+        # RIGHT HALF
+        right_layout = QVBoxLayout()
+        self.gen_desc_btn = QPushButton('Generate Description', self)
+        self.gen_desc_btn.clicked.connect(self.generate_description)
+        right_layout.addWidget(self.gen_desc_btn)
+
+        right_layout.addWidget(QLabel("Wikimedia Commons file name:"))
+        self.filename_input = QLineEdit(self)
+        self.filename_input.setPlaceholderText('Wikimedia Commons file name')
+        self.filename_input.setStyleSheet(f"background-color: {YELLOW4FORM}; color: {BLACK4FORM}; placeholder-text-color: {GRAY4FORM};")
+        right_layout.addWidget(self.filename_input)
+
+        right_layout.addWidget(QLabel("File Description (going to SDC):"))
+        self.desc_input = QTextEdit(self)
+        self.desc_input.setPlaceholderText('Description for SDC')
+        self.desc_input.setMaximumHeight(100)
+        self.desc_input.setStyleSheet(f"background-color: {YELLOW4FORM}; color: {BLACK4FORM}; placeholder-text-color: {GRAY4FORM};")
+        right_layout.addWidget(self.desc_input)
+
+        right_layout.addWidget(QLabel("Wikitext for file"))
+        self.large_desc_output = QTextEdit(self)
+        self.large_desc_output.setStyleSheet(f"background-color: {YELLOW4FORM}; color: {BLACK4FORM}; placeholder-text-color: {GRAY4FORM};")
+        self.large_desc_output.setPlaceholderText('Wikitext for file')
+        # Size for 20 lines
+        font_metrics = self.large_desc_output.fontMetrics()
+        self.large_desc_output.setMinimumHeight(font_metrics.lineSpacing() * 20)
+        right_layout.addWidget(self.large_desc_output)
+        
+        
+        self.upload_btn = QPushButton('Upload', self)
+        self.upload_btn.clicked.connect(self.start_upload)
+        self.upload_btn.setEnabled(False)
+        right_layout.addWidget(self.upload_btn)
+
+        
+        right_layout.addStretch()
+
+
+        main_layout.addLayout(left_layout)
+        main_layout.addLayout(right_layout)
+        self.setLayout(main_layout)
+        
         self.load_credentials()
+        
     def select_file(self):
         settings = QSettings(ORG_NAME, APP_NAME)
         saved_file_dir = settings.value("file_dir", ".") # Default to dot   
@@ -367,7 +460,48 @@ class UploaderWindow(QWidget):
             self.image_label.setPixmap(scaled_pixmap)
             file_url = QUrl.fromLocalFile(self.file_path).toString()
             self.link_label.setText(f'<a href="{file_url}" style="color: #0066cc; text-decoration: underline;">Open original image in system viewer</a>')
+    
+    def generate_description(self):
+        if not self.file_path:
+            QMessageBox.warning(self, "Error", "Please select a photo first.")
+            return
 
+        username = self.user_input.text()
+
+        if self.user_input.text() == '':
+            QMessageBox.warning(self, "Error", "Please enter a username first.")
+            return
+            
+        # Disable the button to prevent multiple concurrent generations
+        self.gen_desc_btn.setEnabled(False)
+        self.log_output.append("Generating template in background thread...")
+
+        # Initialize the background thread
+        self.desc_thread = DescriptionGenerationThread(self.file_path, username)
+        
+        # Connect the worker signals to UI updater slots
+        self.desc_thread.description_generated.connect(self.on_description_ready)
+        self.desc_thread.log_signal.connect(self.log_output.append)
+        
+        # Re-enable the button when the thread finishes execution
+        self.desc_thread.finished.connect(lambda: self.gen_desc_btn.setEnabled(True))
+        
+        # Launch the thread
+        self.desc_thread.start()
+
+    def on_description_ready(self, description_text):
+        """
+        Receives the text from the background thread 
+        and updates the text fields on the main thread safely.
+        """
+        self.filename_input.setText('name')
+        self.desc_input.setText('Description')
+        
+        # This writes the transferred text into your large QTextEdit
+        self.large_desc_output.setText(description_text)
+        self.log_output.append("Template generated successfully.")
+        
+        
 
     def save_credentials(self):
         """Saves credentials when the button is clicked."""
