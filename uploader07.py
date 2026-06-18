@@ -11,7 +11,6 @@ import mwclient
 import keyring
 from exif import Image as ExifImage
 from exif_helper import ExifReader
-from wikimedia_helper import WikimediaHelper
 import requests
 
 ORG_NAME = "MyWikimediaTools"
