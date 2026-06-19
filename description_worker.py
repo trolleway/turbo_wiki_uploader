@@ -100,6 +100,7 @@ class DescriptionGenerationThread(QThread):
             categories.append(self.wdobj_category(location_wdobj) )
             categories = [x for x in categories if x is not None]
             categories = [f"[[{item}]]\n" for item in categories]
+            categories = list(set(categories))
             
             if len(categories)>0:
                 categories_text="\n".join(categories)
@@ -145,9 +146,15 @@ class DescriptionGenerationThread(QThread):
             ls=list()
             for wikidata_id in self.wikidata_ids:
                 ls.append(wdobj_dict[wikidata_id]['labels']['en']['value'])    
+            if location_wdobj['labels']['en']['value'] in ls:
+                l=''
+            else:
+                l=location_wdobj['labels']['en']['value']
+                
+            commons_filename = l + ' ' + ls[0]+' '+timestamp2+ext
+            commons_filename = commons_filename.strip()
 
-            commons_filename = location_wdobj['labels']['en']['value'] + ' ' + ls[0]+' '+timestamp2+ext
-            short_description = ' '.join(ls) + ' ' + location_wdobj['labels']['en']['value']
+            short_description = ' '.join(ls) + ' ' + l
             
             #short_description = 'short_description'
             
