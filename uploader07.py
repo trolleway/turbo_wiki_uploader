@@ -24,7 +24,7 @@ APP_NAME = "turbo_wiki_uploader"
 YELLOW4FORM = '#edf8b1'
 BLACK4FORM = "#000000"
 GRAY4FORM = "#8B8B8BFF"
-
+USERAGENT = 'TurboWikiUploader/1.0  (trolleway@yandex.ru)'
 
 
 class UploadThread(QThread):
@@ -43,7 +43,7 @@ class UploadThread(QThread):
     def run(self):
         try:
             self.log_signal.emit("Connecting to Wikimedia Commons...")
-            site = mwclient.Site('commons.wikimedia.org', clients_useragent='PyQt6Uploader/1.0')
+            site = mwclient.Site('commons.wikimedia.org', clients_useragent=USERAGENT)
             site.login(self.username, self.password)
             self.log_signal.emit("Login successful.")
 
@@ -179,10 +179,10 @@ class WikidataSearcher(QThread):
                 "format": "json",
                 "language": self.language,
                 "search": self.query_text,
-                "limit": 10,
+                "limit": 25,
                 "type": "item"
             }
-            headers = {'User-Agent': 'PyQt6Uploader/1.0'}
+            headers = {'User-Agent': USERAGENT}
             
             response = requests.get(url, params=params, headers=headers)
             response.raise_for_status()
@@ -340,13 +340,13 @@ class UploaderWindow(QWidget):
         self.gen_desc_btn.clicked.connect(self.generate_description)
         right_layout.addWidget(self.gen_desc_btn)
 
-        right_layout.addWidget(QLabel("Wikimedia Commons file name:"))
+        right_layout.addWidget(QLabel("File name on Wikimedia Commons:"))
         self.filename_input = QLineEdit(self)
         self.filename_input.setPlaceholderText('Wikimedia Commons file name')
         self.filename_input.setStyleSheet(f"background-color: {YELLOW4FORM}; color: {BLACK4FORM}; placeholder-text-color: {GRAY4FORM};")
         right_layout.addWidget(self.filename_input)
 
-        right_layout.addWidget(QLabel("File Description (going to SDC):"))
+        right_layout.addWidget(QLabel("English Description (going to SDC):"))
         self.desc_input = QTextEdit(self)
         self.desc_input.setPlaceholderText('Description for SDC')
         self.desc_input.setMaximumHeight(100)
@@ -407,22 +407,33 @@ class UploaderWindow(QWidget):
             self.link_label.setText(f'<a href="{file_url}" style="color: #0066cc; text-decoration: underline;">Open original image in system viewer</a>')
     
     def generate_description(self):
+        is_invalid_input = False
         if not self.file_path:
             QMessageBox.warning(self, "Error", "Please select a photo first.")
-            return
+            is_invalid_input = True
 
         username = self.user_input.text()
 
         if self.user_input.text() == '':
             QMessageBox.warning(self, "Error", "Please enter a username first.")
-            return
+            is_invalid_input = True
+        
+        if len(self.selected_wikidata_ids())<1:
+            QMessageBox.warning(self, "Error", "Please select a wikidata objects first.")
+            is_invalid_input = True
             
+        if len(self.selected_wikidata_location_ids()) < 1 or len(self.selected_wikidata_location_ids()) > 1:
+            QMessageBox.warning(self, "Error", "Please select a one location wikidata objects first.") 
+            is_invalid_input = True
+            
+        if is_invalid_input:
+            return
         # Disable the button to prevent multiple concurrent generations
         self.gen_desc_btn.setEnabled(False)
         self.log_output.append("Generating template in background thread...")
 
         # Initialize the background thread
-        self.desc_thread = DescriptionGenerationThread(self.file_path, username)
+        self.desc_thread = DescriptionGenerationThread(self.file_path, username,self.selected_wikidata_ids(),self.selected_wikidata_location_ids())
         
         # Connect the worker signals to UI updater slots
         self.desc_thread.description_generated.connect(self.on_description_ready)
@@ -434,16 +445,17 @@ class UploaderWindow(QWidget):
         # Launch the thread
         self.desc_thread.start()
 
-    def on_description_ready(self, description_text):
+    def on_description_ready(self, description_dict):
         """
         Receives the text from the background thread 
         and updates the text fields on the main thread safely.
         """
         self.filename_input.setText('name')
-        self.desc_input.setText('Description')
+        self.desc_input.setText(description_dict['short_description'])
+        self.filename_input.setText(description_dict['commons_filename'])
         
         # This writes the transferred text into your large QTextEdit
-        self.large_desc_output.setText(description_text)
+        self.large_desc_output.setText(description_dict['description'])
         self.log_output.append("Template generated successfully.")
         
         
@@ -711,9 +723,14 @@ class UploaderWindow(QWidget):
         row = self.selected_list_location_widget.row(widget_item)
         self.selected_list_location_widget.takeItem(row)
     
-    def get_selected_ids(self):
+    def selected_wikidata_ids(self):
         """Returns list of QIDs for use in SDC upload"""
         return [e['id'] for e in self.selected_entities]
+        
+            
+    def selected_wikidata_location_ids(self):
+        """Returns list of QIDs for use in SDC upload"""
+        return [e['id'] for e in self.selected_entities_location]
         
         
 if __name__ == '__main__':
