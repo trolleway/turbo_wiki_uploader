@@ -194,7 +194,7 @@ class WikidataSearcher(QThread):
                 self.results_found.emit([])
                 
         except Exception as e:
-            self.log_signal.emit(f"Error: {str(e)}")
+
             self.error_occurred.emit(str(e))
             
 class UploaderWindow(QWidget):

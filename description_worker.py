@@ -38,7 +38,7 @@ class DescriptionGenerationThread(QThread):
         params = {
             "action": "wbgetentities",
             "ids": entity_id,
-            "props": "labels|claims",
+            "props": "labels|claims|sitelinks",
             "format": "json",
         }
 
@@ -60,7 +60,13 @@ class DescriptionGenerationThread(QThread):
         except requests.exceptions.RequestException as e:
             return {"error": f"API Request failed: {e}"}
 
-            
+    def wdobj_category(self,wdobj):
+        if 'commonswiki' in wdobj['sitelinks']:
+            return wdobj['sitelinks']['commonswiki']['title']
+        if 'P373' in wdobj['claims']:
+            return 'Category:'+wdobj['claims']['P373'][0]['mainsnak']['datavalue']['value']
+        return None
+    
 
     def run(self):
         try:
@@ -85,6 +91,19 @@ class DescriptionGenerationThread(QThread):
                 
             if description_failed:
                 return
+            
+            #categories
+            categories=list()
+            categories_text=''
+            for wdobj in wdobj_dict.values():
+                categories.append(self.wdobj_category(wdobj))
+            categories.append(self.wdobj_category(location_wdobj) )
+            categories = [x for x in categories if x is not None]
+            categories = [f"[[{item}]]\n" for item in categories]
+            
+            if len(categories)>0:
+                categories_text="\n".join(categories)
+            
             
             
             exif_helper = ExifReader()
@@ -117,7 +136,9 @@ class DescriptionGenerationThread(QThread):
 {{{{self|cc-by-4.0}}}}
 
 [[Category:Uploaded with Turbo Wiki Uploader]]
-[[Category:Photographs by {self.username}]]"""
+[[Category:Photographs by {self.username}]]
+{categories_text}
+"""
 
             ls=list()
             for wikidata_id in self.wikidata_ids:
