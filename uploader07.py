@@ -16,6 +16,8 @@ import os
 
 from PyQt6.QtCore import QSettings
 
+from description_worker import DescriptionGenerationThread
+
 ORG_NAME = "trolleway"
 APP_NAME = "turbo_wiki_uploader"
 
@@ -23,63 +25,6 @@ YELLOW4FORM = '#edf8b1'
 BLACK4FORM = "#000000"
 GRAY4FORM = "#8B8B8BFF"
 
-class DescriptionGenerationThread(QThread):
-    """
-    Background thread to extract EXIF and generate 
-    the Wikitext template without freezing the UI.
-    """
-    # Define a signal to send the final text back to the main thread
-    description_generated = pyqtSignal(str)
-    log_signal = pyqtSignal(str) # To report any internal coordinates
-
-    def __init__(self, file_path, username):
-        super().__init__()
-        self.file_path = file_path
-        self.username = username
-
-    def run(self):
-        try:
-            if not self.file_path:
-                return
-
-            exif_helper = ExifReader()
-            exifdata = exif_helper.get_exif_data(self.file_path)
-            
-            if exifdata['lat'] and exifdata['lon']:
-                self.log_signal.emit(f"Coords: {exifdata['lat']:.4f}, {exifdata['lon']:.4f}.")
-                
-            str_heading = ''
-            if exifdata['heading'] is not None:
-                str_heading = f"|heading:{exifdata['heading']}"
-
-            # Construct the Wikitext template string
-            description = f"""== {{int:filedesc}} ==
-{{{{Information
-|other_fields_1 =
-{{{{Information field
-
- |name  = {{{{Label|P1071|link=-|capitalization=ucfirst}}}}
- |value = {{{{#invoke:Information|SDC_Location|icon=true}}}} {{{{#if:{{{{#property:P1071|from=M{{{{PAGEID}}}} }}}}}}|(<small>{{{{#invoke:PropertyChain|PropertyChain|qID={{{{#invoke:WikidataIB |followQid |props=P1071}}}}|pID=P131|endpID=P17}}}}</small>)}}}} }}}}
-{{{{Information field
-
- |name  = {{{{Label|P180|link=-|capitalization=ucfirst}}}}
- |value = {{{{#property:P180|from=M{{{{PAGEID}}}} }}}} }}}} 
-|date={{{{Taken on|{exifdata['dt_iso']}|source=EXIF}}}}
-|author=[[User:{self.username}|{self.username}]]
-}}}}
-{{{{Location dec|{exifdata['lat']}|{exifdata['lon']}{str_heading}}}}}
-
-== {{int:license-header}} ==
-{{{{self|cc-by-4.0}}}}
-
-[[Category:Uploaded with Turbo Wiki Uploader]]
-[[Category:Photographs by {self.username}]]"""
-
-            # Emit the text back to the main UI
-            self.description_generated.emit(description)
-
-        except Exception as e:
-            self.log_signal.emit(f"Error generating description: {str(e)}")
 
 
 class UploadThread(QThread):
@@ -414,7 +359,7 @@ class UploaderWindow(QWidget):
         self.large_desc_output.setPlaceholderText('Wikitext for file')
         # Size for 20 lines
         font_metrics = self.large_desc_output.fontMetrics()
-        self.large_desc_output.setMinimumHeight(font_metrics.lineSpacing() * 20)
+        self.large_desc_output.setMinimumHeight(font_metrics.lineSpacing() * 30)
         right_layout.addWidget(self.large_desc_output)
         
         
