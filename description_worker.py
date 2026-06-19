@@ -109,16 +109,17 @@ class DescriptionGenerationThread(QThread):
             exif_helper = ExifReader()
             exifdata = exif_helper.get_exif_data(self.file_path)
             timestamp = exifdata['dt_iso']
+            from datetime import datetime
+            timestamp2 = datetime.fromisoformat(timestamp).strftime('%Y%m%d_%H%M%S')
             ext = os.path.splitext(self.file_path)[1]
             
-            if exifdata['lat'] and exifdata['lon']:
-                self.log_signal.emit(f"Coords: {exifdata['lat']:.4f}, {exifdata['lon']:.4f}.")
+
                 
             str_heading = ''
             if exifdata['heading'] is not None:
                 str_heading = f"|heading:{exifdata['heading']}"
 
-            description = f"""== {{int:filedesc}} ==
+            description = f"""=={{{{int:filedesc}}}}==
 {{{{Information
 |other_fields_1 =
 {{{{Information field
@@ -126,13 +127,14 @@ class DescriptionGenerationThread(QThread):
  |value = {{{{#invoke:Information|SDC_Location|icon=true}}}} {{{{#if:{{{{#property:P1071|from=M{{{{PAGEID}}}} }}}}}}|(<small>{{{{#invoke:PropertyChain|PropertyChain|qID={{{{#invoke:WikidataIB |followQid |props=P1071}}}}|pID=P131|endpID=P17}}}}</small>)}}}} }}}}
 {{{{Information field
  |name  = {{{{Label|P180|link=-|capitalization=ucfirst}}}}
- |value = {{{{#property:P180|from=M{{{{PAGEID}}}} }}}} }}}} 
+ |value = {{{{#property:P180|from=M{{{{PAGEID}}}} }}}} }}}}
+|source={{{{Own work}}}}  
 |date={{{{Taken on|{exifdata['dt_iso']}|source=EXIF}}}}
 |author=[[User:{self.username}|{self.username}]]
 }}}}
 {{{{Location dec|{exifdata['lat']}|{exifdata['lon']}{str_heading}}}}}
 
-== {{int:license-header}} ==
+=={{{{int:license-header}}}}==
 {{{{self|cc-by-4.0}}}}
 
 [[Category:Uploaded with Turbo Wiki Uploader]]
@@ -144,7 +146,7 @@ class DescriptionGenerationThread(QThread):
             for wikidata_id in self.wikidata_ids:
                 ls.append(wdobj_dict[wikidata_id]['labels']['en']['value'])    
 
-            commons_filename = location_wdobj['labels']['en']['value'] + ' ' + ls[0]+' '+timestamp+ext
+            commons_filename = location_wdobj['labels']['en']['value'] + ' ' + ls[0]+' '+timestamp2+ext
             short_description = ' '.join(ls) + ' ' + location_wdobj['labels']['en']['value']
             
             #short_description = 'short_description'

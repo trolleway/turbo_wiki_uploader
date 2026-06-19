@@ -13,6 +13,7 @@ from exif import Image as ExifImage
 from exif_helper import ExifReader
 import requests
 import os
+import shutil
 
 from PyQt6.QtCore import QSettings
 
@@ -31,14 +32,16 @@ class UploadThread(QThread):
     log_signal = pyqtSignal(str)
     finished_signal = pyqtSignal(bool)
 
-    def __init__(self, username, password, file_path, file_name, description):
+    def __init__(self, username, password, file_path, file_name, short_description,long_description, depicts,locations):
         super().__init__()
         self.username = username
         self.password = password
         self.file_path = file_path
         self.file_name = file_name
-        self.description = description # This text will be used for both wikitext and SDC
-
+        self.long_description = long_description 
+        self.short_description = short_description 
+        self.depicts = depicts
+        self.locations = locations
 
     def run(self):
         try:
@@ -47,44 +50,12 @@ class UploadThread(QThread):
             site.login(self.username, self.password)
             self.log_signal.emit("Login successful.")
 
-            # 1. Upload the File (Wikitext layer)
-
-            # 2. Extract EXIF Data
-            exif_helper = ExifReader()
-            exifdata = exif_helper.get_exif_data(self.file_path)
-            
-
-
-            # Add Claims (Coordinates + Heading) if coordinates exist
-            if exifdata['lat'] and exifdata['lon']:
-                self.log_signal.emit(f"Coords: {exifdata['lat']:.4f}, {exifdata['lon']:.4f}.")
-            str_heading=''
-            if exifdata['heading'] is not None:
-                str_heading='|heading:'+str(exifdata['heading'])
-                
-            text = f"""=={{{{int:filedesc}}}}==
-{{{{Information
-
-|date={{{{Taken on|{exifdata['dt_iso']}|source=EXIF}}}}
-
-|source={{{{Own work}}}}
-|author=[[User:{self.username}|{self.username}]]
-}}}}
-{{{{Location dec|{exifdata['lat']}|{exifdata['lon']}{str_heading}}}}}
-
-=={{{{int:license-header}}}}==
-{{{{self|cc-by-sa-4.0}}}}
-"""
-
-
 
             self.log_signal.emit(f"Uploading {self.file_name}...")
             
 
-            self.log_signal.emit(str(text))
-            #return
             with open(self.file_path, 'rb') as f:
-                site.upload(f, self.file_name, text, ignore=True)
+                site.upload(f, self.file_name, self.long_description, ignore=False)
             
             self.log_signal.emit("Upload complete..")
             # 4. Execute the raw API Call (Updates descriptions and claims in one go)
@@ -94,13 +65,58 @@ class UploadThread(QThread):
             payload = {}
 
             # Add English Description to SDC if text is provided
-            if self.description.strip():
+            if self.short_description.strip():
                 payload['labels'] = {
                     'en': {
                         'language': 'en',
-                        'value': self.description.strip()
+                        'value': self.short_description.strip()
                     }
                 }
+            payload['claims']={}
+            if hasattr(self, 'locations') and self.locations:
+                payload['claims']['P1071'] = []
+                
+                for qid in self.locations:
+                    clean_qid = qid.strip()
+                    if clean_qid.startswith('Q'):
+                        payload['claims']['P1071'].append({
+                            'mainsnak': {
+                                'snaktype': 'value',
+                                'property': 'P1071',
+                                'datavalue': {
+                                    'value': {
+                                        'entity-type': 'item',
+                                        'id': clean_qid
+                                    },
+                                    'type': 'wikibase-entityid'
+                                }
+                            },
+                            'type': 'statement',
+                            'rank': 'normal'
+                        })    
+                        
+            if hasattr(self, 'depicts') and self.depicts:
+                payload['claims']['P180'] = []
+                
+                for qid in self.depicts:
+                    clean_qid = qid.strip()
+                    if clean_qid.startswith('Q'):
+                        payload['claims']['P180'].append({
+                            'mainsnak': {
+                                'snaktype': 'value',
+                                'property': 'P180',
+                                'datavalue': {
+                                    'value': {
+                                        'entity-type': 'item',
+                                        'id': clean_qid
+                                    },
+                                    'type': 'wikibase-entityid'
+                                }
+                            },
+                            'type': 'statement',
+                            'rank': 'normal'
+                        })    
+                    
             token = site.get_token('csrf')
             entity_id = f"M{site.images[self.file_name].pageid}"
             # 4. Execute the raw API Call (Updates descriptions and claims in one go)
@@ -117,11 +133,15 @@ class UploadThread(QThread):
 
             self.log_signal.emit("Structured Data updated!")
 
+            uploaded_folder_path = os.path.join(
+                os.path.dirname(self.file_path), "commons_uploaded"
+            )
+            self.move_file_to_uploaded_dir(self.file_path, uploaded_folder_path)
 
             self.log_signal.emit("Done.")
             self.finished_signal.emit(True)
 
-        except APIError as e:
+        except Exception as e:
             # e.code holds 'fileexists-no-change'
             if e.code == 'fileexists-no-change':
                 # Send a clean, readable message to your PyQt text box
@@ -139,7 +159,14 @@ class UploadThread(QThread):
             self.finished_signal.emit(False)
             QMessageBox.critical(self, "Failed", "An error occurred. Check the log.")
 
-
+    def move_file_to_uploaded_dir(self, filename, uploaded_folder_path):
+        # move uploaded file to subfolder
+        if not os.path.exists(uploaded_folder_path):
+            os.makedirs(uploaded_folder_path)
+        shutil.move(
+            filename, os.path.join(uploaded_folder_path, os.path.basename(filename))
+        )        
+        
 
 
 
@@ -494,17 +521,20 @@ class UploaderWindow(QWidget):
         username = self.user_input.text()
         password = self.pass_input.text()
         target_name = self.filename_input.text()
-        desc = self.desc_input.toPlainText()
+        
+        depicts = self.selected_wikidata_ids()
+        depicts.append(self.selected_wikidata_location_ids()[0])
+        
         self.save_credentials()
 
         if not (username and password and self.file_path and target_name):
-            QMessageBox.warning(self, "Error", "Please fill in all fields.")
+            QMessageBox.warning(self, "Error", "Please fill in username, password, and generate description.")
             return
 
         self.upload_btn.setEnabled(False)
         self.log_output.append("Starting process...")
 
-        self.thread = UploadThread(username, password, self.file_path, target_name, desc)
+        self.thread = UploadThread(username, password, self.file_path, target_name, self.desc_input.toPlainText(),self.large_desc_output.toPlainText(),depicts,self.selected_wikidata_location_ids())
         self.thread.log_signal.connect(self.log_output.append)
         self.thread.finished_signal.connect(self.on_finished)
         self.thread.start()
@@ -731,8 +761,8 @@ class UploaderWindow(QWidget):
     def selected_wikidata_location_ids(self):
         """Returns list of QIDs for use in SDC upload"""
         return [e['id'] for e in self.selected_entities_location]
-        
-        
+
+
 if __name__ == '__main__':
     app = QApplication(sys.argv)
     window = UploaderWindow()
