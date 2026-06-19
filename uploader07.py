@@ -262,7 +262,7 @@ class UploaderWindow(QWidget):
         self.log_output.setReadOnly(True)
         left_layout.addWidget(self.log_output)
         
-        left_layout.addWidget(QLabel("<b>Location (Wikidata Entity):</b>"))
+        left_layout.addWidget(QLabel("<b>Location or event (Wikidata Entity):</b>"))
         self.search_input_location = QLineEdit()
         self.search_input_location.setPlaceholderText("Type to search (e.g., 'Eiffel Tower', 'Abbey road')...")
         self.search_input_location.textChanged.connect(self.on_text_changed_location)
