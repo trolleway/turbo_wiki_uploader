@@ -114,6 +114,13 @@ class DescriptionGenerationThread(QThread):
             timestamp2 = datetime.fromisoformat(timestamp).strftime('%Y%m%d_%H%M%S')
             ext = os.path.splitext(self.file_path)[1]
             
+            if exifdata['lon'] is None or exifdata['lat'] is None:
+                self.log_signal.emit(f"Error: please add camera location coordinates to EXIF tags. You can use Rasklad Geotag, GeoSetter, or JOSM software.")
+                description_failed = True
+            
+            if description_failed:
+                return
+            
 
                 
             str_heading = ''

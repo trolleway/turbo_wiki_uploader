@@ -27,6 +27,9 @@ class ExifReader:
             if hasattr(exif_img, 'gps_latitude') and hasattr(exif_img, 'gps_longitude'):
                 lat = dms_to_decimal(exif_img.gps_latitude, exif_img.gps_latitude_ref)
                 lon = dms_to_decimal(exif_img.gps_longitude, exif_img.gps_longitude_ref)
+            else:
+                lat=None
+                lon=None
             
             if hasattr(exif_img, 'gps_img_direction'):
                 heading = float(exif_img.gps_img_direction)
