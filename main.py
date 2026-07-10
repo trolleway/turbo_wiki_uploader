@@ -415,7 +415,7 @@ class UploaderWindow(QWidget):
         
             self.file_path = fname
             self.file_label.setText(fname.split('/')[-1])
-            self.upload_btn.setEnabled(True)
+
             # Auto-suggest filename
             if not self.filename_input.text():
                 self.filename_input.setText(fname.split('/')[-1])
@@ -434,6 +434,7 @@ class UploaderWindow(QWidget):
             self.link_label.setText(f'<a href="{file_url}" style="color: #0066cc; text-decoration: underline;">Open original image in system viewer</a>')
     
     def generate_description(self):
+        self.upload_btn.setEnabled(False)
         is_invalid_input = False
         if not self.file_path:
             QMessageBox.warning(self, "Error", "Please select a photo first.")
@@ -471,6 +472,7 @@ class UploaderWindow(QWidget):
         
         # Launch the thread
         self.desc_thread.start()
+        
 
     def on_description_ready(self, description_dict):
         """
@@ -484,6 +486,7 @@ class UploaderWindow(QWidget):
         # This writes the transferred text into your large QTextEdit
         self.large_desc_output.setText(description_dict['description'])
         self.log_output.append("Template generated successfully.")
+        self.upload_btn.setEnabled(True)
         
         
 
@@ -530,6 +533,8 @@ class UploaderWindow(QWidget):
         if not (username and password and self.file_path and target_name):
             QMessageBox.warning(self, "Error", "Please fill in username, password, and generate description.")
             return
+        if self.large_desc_output.toPlainText().strip()=='':
+            QMessageBox.warning(self, "Error", "Please generate description frist")
 
         self.upload_btn.setEnabled(False)
         self.log_output.append("Starting process...")
