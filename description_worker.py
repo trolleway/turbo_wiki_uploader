@@ -256,11 +256,29 @@ class DescriptionGenerationThread(QThread):
         return sitelink_category if sitelink_category is not None else P373_category
     
     def get_upper_location_wdid(self,location_wdobj):
+        has_claims = False
         try:
             v=location_wdobj['claims']['P131'][0]['mainsnak']['datavalue']['value']['id']
-            return v
+            has_claims=True
         except:
             return None
+        #get prefered or not depracated or frist claim P131
+        if has_claims == False:
+            return None
+        
+        ranks = list()
+        for claim in location_wdobj['claims']['P131']:
+            rank = claim['rank']
+            if rank=='preferred':
+                return claim['mainsnak']['datavalue']['value']['id']
+        
+        for claim in location_wdobj['claims']['P131']:
+            rank = claim['rank']        
+            if rank=='normal':
+                return claim['mainsnak']['datavalue']['value']['id']
+            
+           
+            
     def is_category_exists(self,category_name) -> bool:  
         api_url = "https://commons.wikimedia.org/w/api.php"
         headers = {

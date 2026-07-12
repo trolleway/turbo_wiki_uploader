@@ -292,9 +292,6 @@ class UploaderWindow(QWidget):
 
         left_layout.addLayout(self.labels_layout)
 
-        self.log_output = QTextEdit(self)
-        self.log_output.setReadOnly(True)
-        left_layout.addWidget(self.log_output)
         
         left_layout.addWidget(QLabel("<b>Location or event (Wikidata Entity):</b>"))
         self.search_input_location = QLineEdit()
@@ -401,6 +398,11 @@ class UploaderWindow(QWidget):
         self.upload_btn.clicked.connect(self.start_upload)
         self.upload_btn.setEnabled(False)
         right_layout.addWidget(self.upload_btn)
+        
+        
+        self.log_output = QTextEdit(self)
+        self.log_output.setReadOnly(True)
+        right_layout.addWidget(self.log_output)
 
         
         right_layout.addStretch()
