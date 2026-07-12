@@ -255,6 +255,8 @@ class UploaderWindow(QWidget):
         
         main_layout = QHBoxLayout()
         left_layout = QVBoxLayout()
+        
+        # LEFT HALF
 
         self.user_input = QLineEdit(self)
         self.user_input.setPlaceholderText('Username')
@@ -269,8 +271,6 @@ class UploaderWindow(QWidget):
         self.file_btn.clicked.connect(self.select_file)
         left_layout.addWidget(self.file_btn)
 
-        self.file_label = QLabel('No file selected', self)
-        left_layout.addWidget(self.file_label)
         
         self.image_label = QLabel('▭', self)
         self.image_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -278,12 +278,19 @@ class UploaderWindow(QWidget):
         self.image_label.setStyleSheet("border: 1px dashed #aaa;") 
         left_layout.addWidget(self.image_label)
         
+        self.labels_layout=QHBoxLayout()
+        self.file_label = QLabel('No file selected', self)
+        self.labels_layout.addWidget(self.file_label)
+        
+        
         # Hyperlink label (Simple text link)
         self.link_label = QLabel('', self)
         self.link_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         # Allows QLabel to automatically open local file URLs in the system viewer
         self.link_label.setOpenExternalLinks(True) 
-        left_layout.addWidget(self.link_label)
+        self.labels_layout.addWidget(self.link_label)
+
+        left_layout.addLayout(self.labels_layout)
 
         self.log_output = QTextEdit(self)
         self.log_output.setReadOnly(True)
