@@ -4,6 +4,8 @@ from exif_helper import ExifReader
 import os
 
 import requests
+from string import Template
+
 
 class DescriptionGenerationThread(QThread):
     """
@@ -12,15 +14,16 @@ class DescriptionGenerationThread(QThread):
     """
     description_generated = pyqtSignal(dict)
     log_signal = pyqtSignal(str)
-    USERAGENT = 'TurboWikiUploader/1.0  (trolleway@yandex.ru)'
 
 
-    def __init__(self, file_path, username,wikidata_ids,location_wikidata_ids):
+
+    def __init__(self, file_path, username,wikidata_ids,location_wikidata_ids,USERAGENT):
         super().__init__()
         self.file_path = file_path
         self.username = username
         self.wikidata_ids=wikidata_ids
         self.location_wikidata_ids=location_wikidata_ids
+        self.USERAGENT = USERAGENT
 
 
     def get_wikidata_object(self,entity_id):
@@ -61,9 +64,11 @@ class DescriptionGenerationThread(QThread):
             return {"error": f"API Request failed: {e}"}
 
     def wdobj_category(self,wdobj):
-        if 'commonswiki' in wdobj['sitelinks']:
-            return wdobj['sitelinks']['commonswiki']['title']
-        if 'P373' in wdobj['claims']:
+
+        if 'commonswiki' in wdobj.get('sitelinks',{}):
+            if 'ategory:' in wdobj['sitelinks']['commonswiki']['title']:
+                return wdobj['sitelinks']['commonswiki']['title']
+        if 'P373' in wdobj.get('claims',{}):
             return 'Category:'+wdobj['claims']['P373'][0]['mainsnak']['datavalue']['value']
         return None
     
@@ -82,11 +87,11 @@ class DescriptionGenerationThread(QThread):
             location_wdobj = self.get_wikidata_object(self.location_wikidata_ids[0])
             description_failed=False    
             if 'en' not in location_wdobj['labels']:
-                self.log_signal.emit(f"Error: please add english name to https://www.wikidata.org/wiki/{location_wdobj['id']}")
+                self.log_signal.emit(f"Error: please add english label to https://www.wikidata.org/wiki/{location_wdobj['id']}")
                 description_failed = True
             for wdobj in wdobj_dict.values():
                 if 'en' not in wdobj['labels']:
-                    self.log_signal.emit(f"Error: please add english name to https://www.wikidata.org/wiki/{wdobj['id']}")
+                    self.log_signal.emit(f"Error: please add english label to https://www.wikidata.org/wiki/{wdobj['id']}")
                     description_failed = True
                 
             if description_failed:
@@ -95,9 +100,18 @@ class DescriptionGenerationThread(QThread):
             #categories
             categories=list()
             categories_text=''
+            category_for_location_needed = True
             for wdobj in wdobj_dict.values():
-                categories.append(self.wdobj_category(wdobj))
-            categories.append(self.wdobj_category(location_wdobj) )
+                #categories.append(self.wdobj_category(wdobj))
+                category = self.get_category_for_object_in_location(wdobj,location_wdobj)
+                
+                
+                self.log_signal.emit(category)
+                if category is not None:
+                    categories.append('Category:'+category)
+                    category_for_location_needed = False
+            if category_for_location_needed:        
+                categories.append(self.wdobj_category(location_wdobj) )
             categories = [x for x in categories if x is not None]
             categories = [f"[[{item}]]\n" for item in categories]
             categories = list(set(categories))
@@ -172,3 +186,139 @@ class DescriptionGenerationThread(QThread):
 
         except Exception as e:
             self.log_signal.emit(f"Error generating description: {str(e)}")
+            
+
+
+
+    def search_commonscat_by_2_wikidata(self,subject_id: str, country_id: str) -> dict:
+        """Executes a SPARQL query on Wikidata using subject and country entity IDs.
+
+        Args:
+            subject_id: The Wikidata entity ID for the subject (e.g., 'Q146')
+            country_id: The Wikidata entity ID for the country (e.g., 'Q30')
+
+        Returns:
+            A dictionary containing the JSON response bindings from Wikidata.
+        """
+        # 1. Define the SPARQL endpoint URL
+        url = "https://query.wikidata.org/sparql"
+
+        # 2. Set up the template query string
+        query_template = Template(
+            """SELECT ?item ?itemLabel ?commonsCategory ?sitelink WHERE {
+  ?item wdt:P971 wd:$subject .
+  ?item wdt:P971 wd:$country .
+  
+  # Selects P373 (Wikimedia Commons category text string)
+  OPTIONAL { ?item wdt:P373 ?commonsCategory. }
+  
+  # Selects the formal Wikimedia Commons category sitelink URL
+  OPTIONAL {
+    ?sitelink schema:about ?item ;
+              schema:isPartOf <https://commons.wikimedia.org/> .
+  }
+  
+  SERVICE wikibase:label { bd:serviceParam wikibase:language "[AUTO_LANGUAGE],en". }
+}"""
+
+        )
+
+        # 3. Substitute placeholders with the provided parameters
+        # Note: "[auto_language]" changed to "[style_language],en" for API compatibility
+        sparql_query = query_template.substitute(
+            subject=subject_id, country=country_id
+        )
+
+        # 4. Configure headers (Wikidata requires a specific User-Agent)
+        headers = {
+            "User-Agent": self.USERAGENT,
+            "Accept": "application/sparql-results+json",
+        }
+        
+
+
+        # 5. Execute the HTTP GET request
+
+        response = requests.get(
+            url, params={"query": sparql_query, "format": "json"}, headers=headers
+        )
+
+        # 6. Raise an exception for HTTP error codes
+        response.raise_for_status()
+
+        # 7. Extract and return the inner data list
+        data = response.json()
+        if data['results']['bindings']==[]:
+            return None
+        sitelink_category=data.get("results", {}).get("bindings", [])[0].get("sitelink",{}).get("value",'').replace('https://commons.wikimedia.org/wiki/Category:','')
+        P373_category=data.get("results", {}).get("bindings", [])[0].get("commonsCategory",{}).get("value",'')
+
+        return sitelink_category if sitelink_category is not None else P373_category
+    
+    def get_upper_location_wdid(self,location_wdobj):
+        try:
+            v=location_wdobj['claims']['P131'][0]['mainsnak']['datavalue']['value']['id']
+            return v
+        except:
+            return None
+    def is_category_exists(self,category_name) -> bool:  
+        api_url = "https://commons.wikimedia.org/w/api.php"
+        headers = {
+            "User-Agent": self.USERAGENT
+        }
+        params = {
+            "action": "query",
+            "format": "json",
+            "titles": f"Category:{category_name}"
+        }
+
+        try:
+            response = requests.get(api_url, headers=headers, params=params)
+            response.raise_for_status()
+            data = response.json()
+            
+            # Extract pages from the response
+            pages = data.get("query", {}).get("pages", {})
+            
+            # MediaWiki returns a page ID of "-1" if the page/category does not exist
+            for page_id in pages.keys():
+                if int(page_id) > 0:
+                    return True
+                    
+            return False
+            
+        except requests.exceptions.RequestException as e:
+            print(f"API Request failed: {e}")
+            return False
+
+
+        
+    def get_category_for_object_in_location(self, object_wdobj, location_wdobj):
+        stop_hieraechy_walk = False
+        cnt = 0
+        while not stop_hieraechy_walk:
+            cnt = cnt + 1
+            if cnt > 9:
+                stop_hieraechy_walk = True
+            object_name = self.wdobj_category(object_wdobj).replace('Category:','')
+            lc=self.wdobj_category(location_wdobj)
+            if lc is None: lc=''
+            location_name = lc.replace('Category:','')
+            msg = f"Search Wikidata for category combines topics 〚{object_wdobj.get('labels',{}).get('en',{}).get('value','')}〛〚{location_wdobj.get('labels',{}).get('en',{}).get('value','')}〛"
+            self.log_signal.emit(msg)
+            #print(msg)
+            category = self.search_commonscat_by_2_wikidata(object_wdobj['id'],location_wdobj['id'])
+            if category is not None: 
+                return category
+            suggested_category = f'{object_name} in {location_name}'
+            msg=f'Check if exists [[Category:{suggested_category}]]'
+            self.log_signal.emit(msg)
+            #print(msg)
+            if self.is_category_exists(suggested_category):
+                return suggested_category
+            
+            upper_wdid=self.get_upper_location_wdid(location_wdobj)
+            if upper_wdid is None:
+                return None
+            upper_wdobj = self.get_wikidata_object(upper_wdid)
+            location_wdobj = upper_wdobj

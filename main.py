@@ -432,7 +432,8 @@ class UploaderWindow(QWidget):
             self.image_label.setPixmap(scaled_pixmap)
             file_url = QUrl.fromLocalFile(self.file_path).toString()
             self.link_label.setText(f'<a href="{file_url}" style="color: #0066cc; text-decoration: underline;">Open original image in system viewer</a>')
-    
+            self.upload_btn.setEnabled(False)
+            
     def generate_description(self):
         self.upload_btn.setEnabled(False)
         is_invalid_input = False
@@ -458,10 +459,13 @@ class UploaderWindow(QWidget):
             return
         # Disable the button to prevent multiple concurrent generations
         self.gen_desc_btn.setEnabled(False)
-        self.log_output.append("Generating template in background thread...")
+        self.log_output.append("Generating description...")
 
         # Initialize the background thread
-        self.desc_thread = DescriptionGenerationThread(self.file_path, username,self.selected_wikidata_ids(),self.selected_wikidata_location_ids())
+        self.desc_thread = DescriptionGenerationThread(self.file_path, 
+        username,self.selected_wikidata_ids(),
+        self.selected_wikidata_location_ids(),
+        USERAGENT)
         
         # Connect the worker signals to UI updater slots
         self.desc_thread.description_generated.connect(self.on_description_ready)
@@ -638,7 +642,7 @@ class UploaderWindow(QWidget):
             qid = item.get('id')
             desc = item.get('description', 'No description available')
             
-            display_text = f"{label} ({qid})\n   ↳ {desc}"
+            display_text = f"{label} ({qid})\t   ↳ {desc}"
             
             list_item = QListWidgetItem(display_text)
             # Store the actual data in the item for retrieval later
@@ -659,7 +663,7 @@ class UploaderWindow(QWidget):
             qid = item.get('id')
             desc = item.get('description', 'No description available')
             
-            display_text = f"{label} ({qid})\n   ↳ {desc}"
+            display_text = f"{label} ({qid})\t   ↳ {desc}"
             
             list_item = QListWidgetItem(display_text)
             # Store the actual data in the item for retrieval later
