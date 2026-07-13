@@ -104,12 +104,16 @@ class DescriptionGenerationThread(QThread):
             for wdobj in wdobj_dict.values():
                 #categories.append(self.wdobj_category(wdobj))
                 category = self.get_category_for_object_in_location(wdobj,location_wdobj)
+                if category is None:
+                    category = self.wdobj_category(wdobj)
                 
                 
                 self.log_signal.emit(category)
                 if category is not None:
-                    categories.append('Category:'+category)
-                    category_for_location_needed = False
+                    if 'Category:' not in category:
+                        category = 'Category:'+category
+                    categories.append(category)
+                    #category_for_location_needed = False
             if category_for_location_needed:        
                 categories.append(self.wdobj_category(location_wdobj) )
             categories = [x for x in categories if x is not None]

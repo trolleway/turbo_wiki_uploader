@@ -139,6 +139,7 @@ class UploadThread(QThread):
             self.move_file_to_uploaded_dir(self.file_path, uploaded_folder_path)
 
             self.log_signal.emit("Done.")
+            self.log_signal.emit("https://commons.wikimedia.org/wiki/File:"+self.file_name)
             self.finished_signal.emit(True)
 
         except Exception as e:
@@ -560,10 +561,10 @@ class UploaderWindow(QWidget):
     def on_finished(self, success):
         self.upload_btn.setEnabled(True)
         if success:
-            QMessageBox.information(self, "Success", "Upload and data update complete!")
+            pass
         else:
             pass
-            #QMessageBox.critical(self, "Failed", "An error occurred. Check the log.")
+            QMessageBox.critical(self, "Failed", "An error occurred. Check the log.")
 
     ##### Search wikidata entities
     
