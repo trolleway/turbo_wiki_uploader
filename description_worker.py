@@ -17,13 +17,14 @@ class DescriptionGenerationThread(QThread):
 
 
 
-    def __init__(self, file_path, username,wikidata_ids,location_wikidata_ids,USERAGENT):
+    def __init__(self, file_path, username,wikidata_ids,location_wikidata_ids,USERAGENT,preset='place'):
         super().__init__()
         self.file_path = file_path
         self.username = username
         self.wikidata_ids=wikidata_ids
         self.location_wikidata_ids=location_wikidata_ids
         self.USERAGENT = USERAGENT
+        self.preset = preset
 
 
     def get_wikidata_object(self,entity_id):
@@ -74,6 +75,7 @@ class DescriptionGenerationThread(QThread):
     
 
     def run(self):
+        from datetime import datetime
         try:
             if not self.file_path:
                 return
@@ -97,38 +99,60 @@ class DescriptionGenerationThread(QThread):
             if description_failed:
                 return
             
-            #categories
-            categories=list()
-            categories_text=''
-            category_for_location_needed = True
-            for wdobj in wdobj_dict.values():
-                #categories.append(self.wdobj_category(wdobj))
-                category = self.get_category_for_object_in_location(wdobj,location_wdobj)
-                if category is None:
-                    category = self.wdobj_category(wdobj)
-                
-                
-                self.log_signal.emit(category)
-                if category is not None:
-                    if 'Category:' not in category:
-                        category = 'Category:'+category
-                    categories.append(category)
-                    #category_for_location_needed = False
-            if category_for_location_needed:        
+            # descriptions presets
+            # now all presets implemented in this method, to make more simple code
+            
+            self.log_signal.emit(self.preset)
+            
+            if self.preset=='place':
+                #categories
+                categories=list()
+                categories_text=''
+                category_for_location_needed = True
+                for wdobj in wdobj_dict.values():
+                    categories.append(self.wdobj_category(wdobj))
+        
                 categories.append(self.wdobj_category(location_wdobj) )
-            categories = [x for x in categories if x is not None]
-            categories = [f"[[{item}]]\n" for item in categories]
-            categories = list(set(categories))
+                categories = [x for x in categories if x is not None]
+                categories = [f"[[{item}]]\n" for item in categories]
+                categories = list(set(categories))
+                
+                if len(categories)>0:
+                    categories_text="\n".join(categories)
             
-            if len(categories)>0:
-                categories_text="\n".join(categories)
+            elif self.preset=='thing_in_place':
             
+                #categories
+                categories=list()
+                categories_text=''
+                category_for_location_needed = True
+                for wdobj in wdobj_dict.values():
+                    #categories.append(self.wdobj_category(wdobj))
+                    category = self.get_category_for_object_in_location(wdobj,location_wdobj)
+                    if category is None:
+                        category = self.wdobj_category(wdobj)
+                    
+                    
+                    self.log_signal.emit(category)
+                    if category is not None:
+                        if 'Category:' not in category:
+                            category = 'Category:'+category
+                        categories.append(category)
+                        category_for_location_needed = False
+                if category_for_location_needed:        
+                    categories.append(self.wdobj_category(location_wdobj) )
+                categories = [x for x in categories if x is not None]
+                categories = [f"[[{item}]]\n" for item in categories]
+                categories = list(set(categories))
+                
+                if len(categories)>0:
+                    categories_text="\n".join(categories)            
             
             
             exif_helper = ExifReader()
             exifdata = exif_helper.get_exif_data(self.file_path)
             timestamp = exifdata['dt_iso']
-            from datetime import datetime
+
             timestamp2 = datetime.fromisoformat(timestamp).strftime('%Y%m%d_%H%M%S')
             ext = os.path.splitext(self.file_path)[1]
             

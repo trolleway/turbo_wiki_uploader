@@ -42,6 +42,7 @@ class UploadThread(QThread):
         self.short_description = short_description 
         self.depicts = depicts
         self.locations = locations
+        self.preset = 'place'
 
     def run(self):
         try:
@@ -389,10 +390,10 @@ class UploaderWindow(QWidget):
         self.label_preset_select = QLabel("Preset:")
         right_layout.addWidget(self.label_preset_select)
         self.tab_presets = QTabWidget()
-        self.tab_presets.addTab(tab_preset_01, "Enter image coordinates")
-        self.tab_presets.addTab(tab_preset_02, "Enter dest coordinates")
+        self.tab_presets.addTab(tab_preset_01, "Geographic object")
+        self.tab_presets.addTab(tab_preset_02, "Object in place")
         self.tab_presets.setCurrentIndex(0)
-        #self.tab_presets.currentChanged.connect(self.on_tab_change)
+        self.tab_presets.currentChanged.connect(self.on_preset_tab_change)
         self.tab_presets.setStyleSheet(
             """
             QTabWidget::pane { /* The tab widget frame */
@@ -461,6 +462,12 @@ class UploaderWindow(QWidget):
         
         self.load_credentials()
         
+    def on_preset_tab_change(self, index):
+        if index==0:
+            self.preset = 'place'
+        if index==1:
+            self.preset = 'thing_in_place'
+        
     def select_file(self):
         settings = QSettings(ORG_NAME, APP_NAME)
         saved_file_dir = settings.value("file_dir", ".") # Default to dot   
@@ -521,7 +528,8 @@ class UploaderWindow(QWidget):
         self.desc_thread = DescriptionGenerationThread(self.file_path, 
         username,self.selected_wikidata_ids(),
         self.selected_wikidata_location_ids(),
-        USERAGENT)
+        USERAGENT,
+        self.preset)
         
         # Connect the worker signals to UI updater slots
         self.desc_thread.description_generated.connect(self.on_description_ready)
