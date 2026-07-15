@@ -2,7 +2,7 @@ import sys
 import datetime
 from PyQt6.QtWidgets import (QApplication, QWidget, QVBoxLayout, QLabel, 
                              QLineEdit, QPushButton, QFileDialog, QTextEdit, QListWidget, QListWidgetItem, 
-                             QAbstractItemView, QMessageBox, QHBoxLayout)
+                             QAbstractItemView, QMessageBox, QHBoxLayout,QTabWidget)
 from PyQt6.QtCore import QThread,QTimer, pyqtSignal
 from PyQt6.QtGui import QPixmap
 from PyQt6.QtCore import Qt,QUrl
@@ -368,6 +368,52 @@ class UploaderWindow(QWidget):
 
         # RIGHT HALF
         right_layout = QVBoxLayout()
+        
+        # tab1
+        tab_preset_01 = QWidget()
+        layout_preset_01 = QVBoxLayout()
+        self.gen_desc_btn_preset_01 = QPushButton('Generate Description: Place', self)
+        self.gen_desc_btn_preset_01.clicked.connect(self.generate_description)
+        layout_preset_01.addWidget(self.gen_desc_btn_preset_01)
+        tab_preset_01.setLayout(layout_preset_01)
+
+        # tab2
+        tab_preset_02 = QWidget()
+        layout_preset_02 = QVBoxLayout()
+        self.gen_desc_btn_preset_02 = QPushButton('Generate Description: Thing in Place', self)
+        self.gen_desc_btn_preset_02.clicked.connect(self.generate_description)
+        layout_preset_02.addWidget(self.gen_desc_btn_preset_02)
+        tab_preset_02.setLayout(layout_preset_02)
+
+        # tab group
+        self.label_preset_select = QLabel("Preset:")
+        right_layout.addWidget(self.label_preset_select)
+        self.tab_presets = QTabWidget()
+        self.tab_presets.addTab(tab_preset_01, "Enter image coordinates")
+        self.tab_presets.addTab(tab_preset_02, "Enter dest coordinates")
+        self.tab_presets.setCurrentIndex(0)
+        #self.tab_presets.currentChanged.connect(self.on_tab_change)
+        self.tab_presets.setStyleSheet(
+            """
+            QTabWidget::pane { /* The tab widget frame */
+                border: 2px solid black;
+                position: absolute;
+                top: -0.5em;
+            }
+            QTabBar::tab {
+                background: lightgray;
+                border: 1px solid black;
+                padding: 5px;
+            }
+            QTabBar::tab:selected {
+                background: white;
+            }
+        """
+        )
+        
+        right_layout.addWidget(self.tab_presets)
+        
+        
         self.gen_desc_btn = QPushButton('Generate Description', self)
         self.gen_desc_btn.clicked.connect(self.generate_description)
         right_layout.addWidget(self.gen_desc_btn)
@@ -559,7 +605,7 @@ class UploaderWindow(QWidget):
         self.thread.start()
 
     def on_finished(self, success):
-        self.upload_btn.setEnabled(True)
+        self.upload_btn.setEnabled(False) #prevent from click upload second time
         if success:
             pass
         else:
