@@ -2,7 +2,7 @@ import sys
 import datetime
 from PyQt6.QtWidgets import (QApplication, QWidget, QVBoxLayout, QLabel, 
                              QLineEdit, QPushButton, QFileDialog, QTextEdit, QListWidget, QListWidgetItem, 
-                             QAbstractItemView, QMessageBox, QHBoxLayout)
+                             QAbstractItemView, QMessageBox, QHBoxLayout,QTabWidget)
 from PyQt6.QtCore import QThread,QTimer, pyqtSignal
 from PyQt6.QtGui import QPixmap
 from PyQt6.QtCore import Qt,QUrl
@@ -42,6 +42,7 @@ class UploadThread(QThread):
         self.short_description = short_description 
         self.depicts = depicts
         self.locations = locations
+        self.preset = 'place'
 
     def run(self):
         try:
@@ -231,6 +232,7 @@ class UploaderWindow(QWidget):
         self.selected_entities = [] # Stores dicts: {'id': 'Q..', 'label': '..'}
         self.selected_entities_location = [] # Stores dicts: {'id': 'Q..', 'label': '..'}
         
+        self.css_textedit = f"background-color: {YELLOW4FORM}; color: {BLACK4FORM}; placeholder-text-color: {GRAY4FORM};"
         self.initUI()
         
         # Search Logic Setup
@@ -368,6 +370,60 @@ class UploaderWindow(QWidget):
 
         # RIGHT HALF
         right_layout = QVBoxLayout()
+        
+        # tab1
+        tab_preset_01 = QWidget()
+        layout_preset_01 = QVBoxLayout()
+        layout_preset_01.addWidget(QLabel("Geographic object: building, street, station"))
+        self.gen_desc_btn_preset_01 = QPushButton('Generate Description: Place', self)
+        self.gen_desc_btn_preset_01.clicked.connect(self.generate_description)
+        layout_preset_01.addWidget(self.gen_desc_btn_preset_01)
+        tab_preset_01.setLayout(layout_preset_01)
+
+        # tab2
+        tab_preset_02 = QWidget()
+        layout_preset_02 = QVBoxLayout()
+        layout_preset_02.addWidget(QLabel("Object in museum, object in city"))
+        layout_preset_02.addWidget(QLabel("App will search for most suitable categories"))
+        layout_preset_02.addWidget(QLabel("Name of object (optional):"))
+        self.preset_02_object_name = QLineEdit()
+        layout_preset_02.addWidget(self.preset_02_object_name)
+        self.preset_02_object_name.setStyleSheet(self.css_textedit)
+        
+        self.gen_desc_btn_preset_02 = QPushButton('Generate Description: Object In Place', self)
+        self.gen_desc_btn_preset_02.clicked.connect(self.generate_description)
+        layout_preset_02.addWidget(self.gen_desc_btn_preset_02)
+        tab_preset_02.setLayout(layout_preset_02)
+
+        # tab group
+        self.label_preset_select = QLabel("Preset:")
+        right_layout.addWidget(self.label_preset_select)
+        self.tab_presets = QTabWidget()
+        self.tab_presets.addTab(tab_preset_01, "Geographic object")
+        self.tab_presets.addTab(tab_preset_02, "Object in place")
+        self.tab_presets.setCurrentIndex(0)
+        self.tab_presets.currentChanged.connect(self.on_preset_tab_change)
+        self.tab_presets.setStyleSheet(
+            """
+            QTabWidget::pane { /* The tab widget frame */
+                border: 2px solid black;
+                position: absolute;
+                top: -0.5em;
+            }
+            QTabBar::tab {
+                background: lightgray;
+                border: 1px solid black;
+                padding: 5px;
+            }
+            QTabBar::tab:selected {
+                background: white;
+            }
+        """
+        )
+        
+        right_layout.addWidget(self.tab_presets)
+        
+        
         self.gen_desc_btn = QPushButton('Generate Description', self)
         self.gen_desc_btn.clicked.connect(self.generate_description)
         right_layout.addWidget(self.gen_desc_btn)
@@ -375,19 +431,19 @@ class UploaderWindow(QWidget):
         right_layout.addWidget(QLabel("File name on Wikimedia Commons:"))
         self.filename_input = QLineEdit(self)
         self.filename_input.setPlaceholderText('Wikimedia Commons file name')
-        self.filename_input.setStyleSheet(f"background-color: {YELLOW4FORM}; color: {BLACK4FORM}; placeholder-text-color: {GRAY4FORM};")
+        self.filename_input.setStyleSheet(self.css_textedit)
         right_layout.addWidget(self.filename_input)
 
         right_layout.addWidget(QLabel("English Description (going to SDC):"))
         self.desc_input = QTextEdit(self)
         self.desc_input.setPlaceholderText('Description for SDC')
         self.desc_input.setMaximumHeight(100)
-        self.desc_input.setStyleSheet(f"background-color: {YELLOW4FORM}; color: {BLACK4FORM}; placeholder-text-color: {GRAY4FORM};")
+        self.desc_input.setStyleSheet(self.css_textedit)
         right_layout.addWidget(self.desc_input)
 
         right_layout.addWidget(QLabel("Wikitext for file"))
         self.large_desc_output = QTextEdit(self)
-        self.large_desc_output.setStyleSheet(f"background-color: {YELLOW4FORM}; color: {BLACK4FORM}; placeholder-text-color: {GRAY4FORM};")
+        self.large_desc_output.setStyleSheet(self.css_textedit)
         self.large_desc_output.setPlaceholderText('Wikitext for file')
         # Size for 20 lines
         font_metrics = self.large_desc_output.fontMetrics()
@@ -414,6 +470,12 @@ class UploaderWindow(QWidget):
         self.setLayout(main_layout)
         
         self.load_credentials()
+        
+    def on_preset_tab_change(self, index):
+        if index==0:
+            self.preset = 'place'
+        if index==1:
+            self.preset = 'thing_in_place'
         
     def select_file(self):
         settings = QSettings(ORG_NAME, APP_NAME)
@@ -443,7 +505,11 @@ class UploaderWindow(QWidget):
             file_url = QUrl.fromLocalFile(self.file_path).toString()
             self.link_label.setText(f'<a href="{file_url}" style="color: #0066cc; text-decoration: underline;">Open original image in system viewer</a>')
             self.upload_btn.setEnabled(False)
-            
+    
+    def presets_fields_as_dict(self) -> dict:
+        fields={}
+        fields['objectname']=self.preset_02_object_name.text()
+        return fields
     def generate_description(self):
         self.upload_btn.setEnabled(False)
         is_invalid_input = False
@@ -475,7 +541,10 @@ class UploaderWindow(QWidget):
         self.desc_thread = DescriptionGenerationThread(self.file_path, 
         username,self.selected_wikidata_ids(),
         self.selected_wikidata_location_ids(),
-        USERAGENT)
+        USERAGENT,
+        preset=self.preset,
+        preset_fields = self.presets_fields_as_dict()
+        )
         
         # Connect the worker signals to UI updater slots
         self.desc_thread.description_generated.connect(self.on_description_ready)
@@ -559,7 +628,7 @@ class UploaderWindow(QWidget):
         self.thread.start()
 
     def on_finished(self, success):
-        self.upload_btn.setEnabled(True)
+        self.upload_btn.setEnabled(False) #prevent from click upload second time
         if success:
             pass
         else:

@@ -17,13 +17,15 @@ class DescriptionGenerationThread(QThread):
 
 
 
-    def __init__(self, file_path, username,wikidata_ids,location_wikidata_ids,USERAGENT):
+    def __init__(self, file_path, username,wikidata_ids,location_wikidata_ids,USERAGENT,preset='place',preset_fields={}):
         super().__init__()
         self.file_path = file_path
         self.username = username
         self.wikidata_ids=wikidata_ids
         self.location_wikidata_ids=location_wikidata_ids
         self.USERAGENT = USERAGENT
+        self.preset = preset
+        self.preset_fields = preset_fields
 
 
     def get_wikidata_object(self,entity_id):
@@ -74,6 +76,7 @@ class DescriptionGenerationThread(QThread):
     
 
     def run(self):
+        from datetime import datetime
         try:
             if not self.file_path:
                 return
@@ -97,40 +100,102 @@ class DescriptionGenerationThread(QThread):
             if description_failed:
                 return
             
-            #categories
-            categories=list()
-            categories_text=''
-            category_for_location_needed = True
-            for wdobj in wdobj_dict.values():
-                #categories.append(self.wdobj_category(wdobj))
-                category = self.get_category_for_object_in_location(wdobj,location_wdobj)
-                if category is None:
-                    category = self.wdobj_category(wdobj)
-                
-                
-                self.log_signal.emit(category)
-                if category is not None:
-                    if 'Category:' not in category:
-                        category = 'Category:'+category
-                    categories.append(category)
-                    #category_for_location_needed = False
-            if category_for_location_needed:        
-                categories.append(self.wdobj_category(location_wdobj) )
-            categories = [x for x in categories if x is not None]
-            categories = [f"[[{item}]]\n" for item in categories]
-            categories = list(set(categories))
+            # descriptions presets
+            # now all presets implemented in this method, to make more simple code
             
-            if len(categories)>0:
-                categories_text="\n".join(categories)
-            
-            
+            self.log_signal.emit(self.preset)
             
             exif_helper = ExifReader()
             exifdata = exif_helper.get_exif_data(self.file_path)
             timestamp = exifdata['dt_iso']
-            from datetime import datetime
+
             timestamp2 = datetime.fromisoformat(timestamp).strftime('%Y%m%d_%H%M%S')
             ext = os.path.splitext(self.file_path)[1]
+            
+            if self.preset=='place':
+                #categories
+                categories=list()
+                categories_text=''
+                category_for_location_needed = True
+                for wdobj in wdobj_dict.values():
+                    categories.append(self.wdobj_category(wdobj))
+        
+                categories.append(self.wdobj_category(location_wdobj) )
+                categories = [x for x in categories if x is not None]
+                categories = [f"[[{item}]]\n" for item in categories]
+                categories = list(set(categories))
+                
+                if len(categories)>0:
+                    categories_text="\n".join(categories)
+                    
+                ls=list()
+                for wikidata_id in self.wikidata_ids:
+                    ls.append(wdobj_dict[wikidata_id]['labels']['en']['value'])    
+                if location_wdobj['labels']['en']['value'] in ls:
+                    l=''
+                else:
+                    l=location_wdobj['labels']['en']['value']
+                if self.object_name.strip() != '':
+                    l = self.object_name.strip() + ' '+  l 
+                    
+                commons_filename = l + ' ' + ls[0]+' '+timestamp2+ext
+                commons_filename = commons_filename.strip()
+
+                short_description = ' '.join(ls) + ' ' + l
+                
+
+            
+            elif self.preset=='thing_in_place':
+            
+                #categories
+                categories=list()
+                categories_text=''
+                category_for_location_needed = True
+                for wdobj in wdobj_dict.values():
+                    #categories.append(self.wdobj_category(wdobj))
+                    category = self.get_category_for_object_in_location(wdobj,location_wdobj)
+                    if category is None:
+                        category = self.wdobj_category(wdobj)
+                    
+                    
+                    self.log_signal.emit(category)
+                    if category is not None:
+                        if 'Category:' not in category:
+                            category = 'Category:'+category
+                        categories.append(category)
+                        category_for_location_needed = False
+                if category_for_location_needed:        
+                    categories.append(self.wdobj_category(location_wdobj) )
+                categories = [x for x in categories if x is not None]
+                categories = [f"[[{item}]]\n" for item in categories]
+                categories = list(set(categories))
+                
+                if len(categories)>0:
+                    categories_text="\n".join(categories)      
+
+                
+                objectname = self.preset_fields.get('objectname','')
+                
+                ls=list()
+                for wikidata_id in self.wikidata_ids:
+                    ls.append(wdobj_dict[wikidata_id]['labels']['en']['value'])    
+                if location_wdobj['labels']['en']['value'] in ls:
+                    locname=''
+                else:
+                    locname=location_wdobj['labels']['en']['value']
+
+                    
+                if objectname != '':
+                    commons_filename = f"{locname} {objectname} {timestamp2}{ext}"
+                    short_description = objectname + ' ' + locname
+                else:
+                    commons_filename = f"{locname} {ls[0]} {timestamp2}{ext}"
+                    short_description = ' '.join(ls) + ' ' + locname
+                commons_filename = commons_filename.strip()
+
+            
+            
+
             
             if exifdata['lon'] is None or exifdata['lat'] is None:
                 self.log_signal.emit(f"Error: please add camera location coordinates to EXIF tags. You can use Rasklad Geotag, GeoSetter, or JOSM software.")
@@ -168,22 +233,7 @@ class DescriptionGenerationThread(QThread):
 {categories_text}
 """
 
-            ls=list()
-            for wikidata_id in self.wikidata_ids:
-                ls.append(wdobj_dict[wikidata_id]['labels']['en']['value'])    
-            if location_wdobj['labels']['en']['value'] in ls:
-                l=''
-            else:
-                l=location_wdobj['labels']['en']['value']
-                
-            commons_filename = l + ' ' + ls[0]+' '+timestamp2+ext
-            commons_filename = commons_filename.strip()
 
-            short_description = ' '.join(ls) + ' ' + l
-            
-            #short_description = 'short_description'
-            
-            
             
             description_dict={'commons_filename':commons_filename,'description':description,'short_description':short_description}
             self.description_generated.emit(description_dict)
