@@ -232,6 +232,7 @@ class UploaderWindow(QWidget):
         self.selected_entities = [] # Stores dicts: {'id': 'Q..', 'label': '..'}
         self.selected_entities_location = [] # Stores dicts: {'id': 'Q..', 'label': '..'}
         
+        self.css_textedit = f"background-color: {YELLOW4FORM}; color: {BLACK4FORM}; placeholder-text-color: {GRAY4FORM};"
         self.initUI()
         
         # Search Logic Setup
@@ -373,6 +374,7 @@ class UploaderWindow(QWidget):
         # tab1
         tab_preset_01 = QWidget()
         layout_preset_01 = QVBoxLayout()
+        layout_preset_01.addWidget(QLabel("Geographic object: building, street, station"))
         self.gen_desc_btn_preset_01 = QPushButton('Generate Description: Place', self)
         self.gen_desc_btn_preset_01.clicked.connect(self.generate_description)
         layout_preset_01.addWidget(self.gen_desc_btn_preset_01)
@@ -381,7 +383,14 @@ class UploaderWindow(QWidget):
         # tab2
         tab_preset_02 = QWidget()
         layout_preset_02 = QVBoxLayout()
-        self.gen_desc_btn_preset_02 = QPushButton('Generate Description: Thing in Place', self)
+        layout_preset_02.addWidget(QLabel("Object in museum, object in city"))
+        layout_preset_02.addWidget(QLabel("App will search for most suitable categories"))
+        layout_preset_02.addWidget(QLabel("Name of object (optional):"))
+        self.preset_02_object_name = QLineEdit()
+        layout_preset_02.addWidget(self.preset_02_object_name)
+        self.preset_02_object_name.setStyleSheet(self.css_textedit)
+        
+        self.gen_desc_btn_preset_02 = QPushButton('Generate Description: Object In Place', self)
         self.gen_desc_btn_preset_02.clicked.connect(self.generate_description)
         layout_preset_02.addWidget(self.gen_desc_btn_preset_02)
         tab_preset_02.setLayout(layout_preset_02)
@@ -422,19 +431,19 @@ class UploaderWindow(QWidget):
         right_layout.addWidget(QLabel("File name on Wikimedia Commons:"))
         self.filename_input = QLineEdit(self)
         self.filename_input.setPlaceholderText('Wikimedia Commons file name')
-        self.filename_input.setStyleSheet(f"background-color: {YELLOW4FORM}; color: {BLACK4FORM}; placeholder-text-color: {GRAY4FORM};")
+        self.filename_input.setStyleSheet(self.css_textedit)
         right_layout.addWidget(self.filename_input)
 
         right_layout.addWidget(QLabel("English Description (going to SDC):"))
         self.desc_input = QTextEdit(self)
         self.desc_input.setPlaceholderText('Description for SDC')
         self.desc_input.setMaximumHeight(100)
-        self.desc_input.setStyleSheet(f"background-color: {YELLOW4FORM}; color: {BLACK4FORM}; placeholder-text-color: {GRAY4FORM};")
+        self.desc_input.setStyleSheet(self.css_textedit)
         right_layout.addWidget(self.desc_input)
 
         right_layout.addWidget(QLabel("Wikitext for file"))
         self.large_desc_output = QTextEdit(self)
-        self.large_desc_output.setStyleSheet(f"background-color: {YELLOW4FORM}; color: {BLACK4FORM}; placeholder-text-color: {GRAY4FORM};")
+        self.large_desc_output.setStyleSheet(self.css_textedit)
         self.large_desc_output.setPlaceholderText('Wikitext for file')
         # Size for 20 lines
         font_metrics = self.large_desc_output.fontMetrics()
@@ -496,7 +505,11 @@ class UploaderWindow(QWidget):
             file_url = QUrl.fromLocalFile(self.file_path).toString()
             self.link_label.setText(f'<a href="{file_url}" style="color: #0066cc; text-decoration: underline;">Open original image in system viewer</a>')
             self.upload_btn.setEnabled(False)
-            
+    
+    def presets_fields_as_dict(self) -> dict:
+        fields={}
+        fields['objectname']=self.preset_02_object_name.text()
+        return fields
     def generate_description(self):
         self.upload_btn.setEnabled(False)
         is_invalid_input = False
@@ -529,7 +542,9 @@ class UploaderWindow(QWidget):
         username,self.selected_wikidata_ids(),
         self.selected_wikidata_location_ids(),
         USERAGENT,
-        self.preset)
+        preset=self.preset,
+        preset_fields = self.presets_fields_as_dict()
+        )
         
         # Connect the worker signals to UI updater slots
         self.desc_thread.description_generated.connect(self.on_description_ready)
