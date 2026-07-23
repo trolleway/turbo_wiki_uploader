@@ -17,7 +17,7 @@ class DescriptionGenerationThread(QThread):
 
 
 
-    def __init__(self, file_path, username,wikidata_ids,location_wikidata_ids,USERAGENT,preset='place',preset_fields={}):
+    def __init__(self, file_path, username,wikidata_ids,location_wikidata_ids,USERAGENT,preset='place',preset_fields={},camera_location_lat=None,camera_location_lon=None):
         super().__init__()
         self.file_path = file_path
         self.username = username
@@ -26,6 +26,8 @@ class DescriptionGenerationThread(QThread):
         self.USERAGENT = USERAGENT
         self.preset = preset
         self.preset_fields = preset_fields
+        self.camera_location_lat=camera_location_lat
+        self.camera_location_lon=camera_location_lon
 
 
     def get_wikidata_object(self,entity_id):
@@ -107,9 +109,11 @@ class DescriptionGenerationThread(QThread):
             
             exif_helper = ExifReader()
             exifdata = exif_helper.get_exif_data(self.file_path)
-            timestamp = exifdata['dt_iso']
-
-            timestamp2 = datetime.fromisoformat(timestamp).strftime('%Y%m%d_%H%M%S')
+            try:
+                timestamp = exifdata['dt_iso']
+                timestamp2 = datetime.fromisoformat(timestamp).strftime('%Y%m%d_%H%M%S')
+            except:
+                self.log_signal.emit(f"Error: while reading datetime. The image must have datetime in EXIF")
             ext = os.path.splitext(self.file_path)[1]
             
             if self.preset=='place':
@@ -135,8 +139,6 @@ class DescriptionGenerationThread(QThread):
                     l=''
                 else:
                     l=location_wdobj['labels']['en']['value']
-                if self.object_name.strip() != '':
-                    l = self.object_name.strip() + ' '+  l 
                     
                 commons_filename = l + ' ' + ls[0]+' '+timestamp2+ext
                 commons_filename = commons_filename.strip()
@@ -197,8 +199,8 @@ class DescriptionGenerationThread(QThread):
             
 
             
-            if exifdata['lon'] is None or exifdata['lat'] is None:
-                self.log_signal.emit(f"Error: please add camera location coordinates to EXIF tags. You can use Rasklad Geotag, GeoSetter, or JOSM software.")
+            if not self.camera_location_lat or not self.camera_location_lon:
+                self.log_signal.emit(f"Error: please set camera location coordinates")
                 description_failed = True
             
             if description_failed:
@@ -206,9 +208,7 @@ class DescriptionGenerationThread(QThread):
             
 
                 
-            str_heading = ''
-            if exifdata['heading'] is not None:
-                str_heading = f"|heading:{exifdata['heading']}"
+
 
             description = f"""=={{{{int:filedesc}}}}==
 {{{{Information
@@ -223,7 +223,7 @@ class DescriptionGenerationThread(QThread):
 |date={{{{Taken on|{exifdata['dt_iso']}|source=EXIF}}}}
 |author=[[User:{self.username}|{self.username}]]
 }}}}
-{{{{Location dec|{exifdata['lat']}|{exifdata['lon']}{str_heading}}}}}
+{{{{Location dec|{self.camera_location_lat}|{self.camera_location_lon}}}}}
 
 =={{{{int:license-header}}}}==
 {{{{self|cc-by-4.0}}}}

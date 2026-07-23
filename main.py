@@ -51,7 +51,7 @@ class UploadThread(QThread):
         self.short_description = short_description 
         self.depicts = depicts
         self.locations = locations
-        self.preset = 'place'
+        #self.preset = 'place'
 
     def run(self):
         try:
@@ -234,7 +234,7 @@ class MapWidget(QWebEngineView):
         </head>
         <body>
             <div id="map" style="height: 380px"></div> <!-- height: 500px; -->
-            <div id="coordinates">Coordinates: </div>
+
             <script>
                 var map = L.map('map', {
                     wheelPxPerZoomLevel: 10
@@ -275,8 +275,7 @@ class MapWidget(QWebEngineView):
                     if (draggable) {
                         marker.on('dragend', function(e) {
                             var coords = e.target.getLatLng();
-                            document.getElementById('coordinates').innerText = 
-                                "Coordinates: " + coords.lat.toFixed(7) + ", " + coords.lng.toFixed(7);
+
                             if (window.jsHandler) {
                                 window.jsHandler.coordinatesUpdatedSlot(
                                     coords.lat.toFixed(7), 
@@ -289,8 +288,7 @@ class MapWidget(QWebEngineView):
                             var clickCoords = e.latlng;
                             marker.setLatLng(clickCoords);
                             marker.fire('dragend', { target: marker });
-                            document.getElementById('coordinates').innerText = 
-                                "Coordinates: " + clickCoords.lat.toFixed(7) + ", " + clickCoords.lng.toFixed(7);
+
                         });
                     }
                     
@@ -398,6 +396,7 @@ class UploaderWindow(QWidget):
         self.debounce_timer.setInterval(400) # Wait 400ms after user stops typing
         self.debounce_timer.timeout.connect(self.start_search)
         self.file_path = None
+        self.preset = 'place'
 
     def initUI(self):
         self.setWindowTitle('Wikimedia Commons Uploader (PyQt6 + mwclient)')
@@ -636,7 +635,7 @@ class UploaderWindow(QWidget):
     def update_coordinate_in_app(self, lat, lon):   
         self.camera_location_lat=lat
         self.camera_location_lon=lon
-        print(f"{self.camera_location_lat=} {self.camera_location_lon=}")
+
         
     def on_preset_tab_change(self, index):
         if index==0:
@@ -673,6 +672,15 @@ class UploaderWindow(QWidget):
             self.link_label.setText(f'<a href="{file_url}" style="color: #0066cc; text-decoration: underline;">Open original image in system viewer</a>')
             self.map_widget.add_marker(lat=None, lon=None, markerclass="image")
             self.upload_btn.setEnabled(False)
+            
+            exif_helper = ExifReader()
+            exifdata = exif_helper.get_exif_data(self.file_path)
+            if exifdata['lon'] is None or exifdata['lat'] is None:
+                #self.desc_thread.log_signal.emit(f"Error: please set camera location coordinates")
+                pass
+            else:
+                self.update_coordinate_in_app(exifdata['lat'],exifdata['lon'])
+                self.map_widget.add_marker(lat=exifdata['lat'], lon=exifdata['lon'], markerclass="image")
     
     def presets_fields_as_dict(self) -> dict:
         fields={}
@@ -711,7 +719,9 @@ class UploaderWindow(QWidget):
         self.selected_wikidata_location_ids(),
         USERAGENT,
         preset=self.preset,
-        preset_fields = self.presets_fields_as_dict()
+        preset_fields = self.presets_fields_as_dict(),
+        camera_location_lat=self.camera_location_lat,
+        camera_location_lon=self.camera_location_lon,
         )
         
         # Connect the worker signals to UI updater slots
