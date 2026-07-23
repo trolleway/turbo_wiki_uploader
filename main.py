@@ -3,9 +3,17 @@ import datetime
 from PyQt6.QtWidgets import (QApplication, QWidget, QVBoxLayout, QLabel, 
                              QLineEdit, QPushButton, QFileDialog, QTextEdit, QListWidget, QListWidgetItem, 
                              QAbstractItemView, QMessageBox, QHBoxLayout,QTabWidget)
-from PyQt6.QtCore import QThread,QTimer, pyqtSignal
+
+from PyQt6.QtWebChannel import QWebChannel
+from PyQt6.QtCore import QThread, QTimer, QObject, pyqtSlot, pyqtSignal, QEvent
 from PyQt6.QtGui import QPixmap
-from PyQt6.QtCore import Qt,QUrl
+from PyQt6.QtCore import Qt,QUrl,pyqtSlot
+
+
+from PyQt6.QtWebEngineWidgets import QWebEngineView
+from PyQt6.QtWebEngineCore import QWebEnginePage
+from PyQt6.QtWebChannel import QWebChannel
+
  
 import mwclient
 import keyring
@@ -18,6 +26,7 @@ import shutil
 from PyQt6.QtCore import QSettings
 
 from description_worker import DescriptionGenerationThread
+
 
 ORG_NAME = "trolleway"
 APP_NAME = "turbo_wiki_uploader"
@@ -179,6 +188,142 @@ class UploadThread(QThread):
 import json
 def import_json(d):
     return json.dumps(d)
+    
+
+class JavaScriptHandler(QObject):
+    coordinatesUpdated = pyqtSignal(str, str)
+    
+    @pyqtSlot(str, str)
+    def coordinatesUpdatedSlot(self, lat, lng):
+        self.coordinatesUpdated.emit(lat, lng)
+
+class CustomWebEnginePage(QWebEnginePage):
+    def javaScriptConsoleMessage(self, level, message, line_number, source_id):
+        print(f"JavaScript console message: {message} (line: {line_number})")
+        
+class MapWidget(QWebEngineView):
+    def __init__(self):
+        super().__init__()
+        self.setPage(CustomWebEnginePage(self))
+        self.channel = QWebChannel()
+        self.jsHandler = JavaScriptHandler()
+        
+        self.channel.registerObject("jsHandler", self.jsHandler)
+        self.page().setWebChannel(self.channel)
+        
+        self.setHtml(self.get_initial_map())
+        
+    def get_initial_map(self):
+        leaflet_html = """
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Leaflet Map</title>
+            <meta charset="utf-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+            <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+            <script src="qrc:///qtwebchannel/qwebchannel.js"></script>
+            <style> #map { width: 100%; height: 100%; } 
+            .leaflet-control-attribution svg {
+    display: none !important;
+}<!-- мне страшно -->
+            .leaflet-control-attribution a[href^="https://leafletjs.com"]::before {
+    content: "";
+    display: inline;</style>
+        </head>
+        <body>
+            <div id="map" style="height: 380px"></div> <!-- height: 500px; -->
+            <div id="coordinates">Coordinates: </div>
+            <script>
+                var map = L.map('map', {
+                    wheelPxPerZoomLevel: 10
+                }).setView([50.666, 20.666], 3);
+                
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                }).addTo(map);
+                
+                var markers = [];
+                
+                new QWebChannel(qt.webChannelTransport, function(channel) {
+                    window.jsHandler = channel.objects.jsHandler;
+                    console.log("Channel initialized");
+                });
+                
+                function removeMarkers() {
+                    for (var i = 0; i < markers.length; i++) {
+                        map.removeLayer(markers[i]);
+                    }
+                    markers = [];
+                }
+                
+                function addMarker(position, draggable=true) {
+                    // Custom marker icon
+                    var imageIcon = L.icon({
+                        iconUrl: 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzAiIGhlaWdodD0iMjAiIHZpZXdCb3g9IjAgMCAzMCAyMCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3Qgd2lkdGg9IjMwIiBoZWlnaHQ9IjIwIiBmaWxsPSIjQjU2RDJEIi8+Cjwvc3ZnPgo=',
+                        iconSize: [20, 20],
+                        iconAnchor: [10, 10]
+                    });
+                    
+                    var marker = L.marker(position, {
+                        draggable: draggable,
+                        autoPan: true,
+                        icon: imageIcon
+                    }).addTo(map);
+                    
+                    if (draggable) {
+                        marker.on('dragend', function(e) {
+                            var coords = e.target.getLatLng();
+                            document.getElementById('coordinates').innerText = 
+                                "Coordinates: " + coords.lat.toFixed(7) + ", " + coords.lng.toFixed(7);
+                            if (window.jsHandler) {
+                                window.jsHandler.coordinatesUpdatedSlot(
+                                    coords.lat.toFixed(7), 
+                                    coords.lng.toFixed(7)
+                                );
+                            }
+                        });
+                        
+                        map.on('click', function(e) {
+                            var clickCoords = e.latlng;
+                            marker.setLatLng(clickCoords);
+                            marker.fire('dragend', { target: marker });
+                            document.getElementById('coordinates').innerText = 
+                                "Coordinates: " + clickCoords.lat.toFixed(7) + ", " + clickCoords.lng.toFixed(7);
+                        });
+                    }
+                    
+                    markers.push(marker);
+                }
+                
+                function setMapView(position, zoom) {
+                    map.setView(position, zoom);
+                }
+            </script>
+        </body>
+        </html>
+        """
+        return leaflet_html
+    
+    def add_marker(self, lat=None, lon=None, markerclass="image", nonmoveable=False):
+        assert markerclass in ("image", "dest")
+
+
+        if not lat or not lon:
+            self.page().runJavaScript("removeMarkers();")
+            js_code = f"addMarker(map.getCenter(),'{markerclass}');"
+        else:
+            if nonmoveable == False:
+                self.page().runJavaScript("removeMarkers();")
+                js_code = f"addMarker([{lat}, {lon}],'{markerclass}');"
+            elif nonmoveable == True:
+                js_code = f"addMarker([{lat}, {lon}],'{markerclass}',false);"
+
+        self.page().runJavaScript(js_code)
+    
+
+
 
 class WikidataSearcher(QThread):
     """
@@ -231,6 +376,8 @@ class UploaderWindow(QWidget):
         super().__init__()
         self.selected_entities = [] # Stores dicts: {'id': 'Q..', 'label': '..'}
         self.selected_entities_location = [] # Stores dicts: {'id': 'Q..', 'label': '..'}
+        self.camera_location_lat = ''
+        self.camera_location_lon = ''
         
         self.css_textedit = f"background-color: {YELLOW4FORM}; color: {BLACK4FORM}; placeholder-text-color: {GRAY4FORM};"
         self.initUI()
@@ -254,7 +401,10 @@ class UploaderWindow(QWidget):
 
     def initUI(self):
         self.setWindowTitle('Wikimedia Commons Uploader (PyQt6 + mwclient)')
-        self.setGeometry(100, 100, 800, 600)
+        self.resize(900, 600) 
+        #self.setGeometry(100, 100, 800, 600)
+        self.setMinimumSize(1000, 700)
+        self.showMaximized()
         
         main_layout = QHBoxLayout()
         left_layout = QVBoxLayout()
@@ -274,12 +424,23 @@ class UploaderWindow(QWidget):
         self.file_btn.clicked.connect(self.select_file)
         left_layout.addWidget(self.file_btn)
 
+        self.images_layout=QHBoxLayout()
         
         self.image_label = QLabel('▭', self)
         self.image_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         # Give the label a border to easily see the bounding area
         self.image_label.setStyleSheet("border: 1px dashed #aaa;") 
-        left_layout.addWidget(self.image_label)
+        self.images_layout.addWidget(self.image_label)
+        
+        # Map widget
+        self.map_widget = MapWidget()
+        #self.map_widget.setFixedHeight(400)
+        self.images_layout.addWidget(self.map_widget)
+        self.map_widget.jsHandler.coordinatesUpdated.connect(
+            self.update_coordinate_in_app
+        )
+        
+        left_layout.addLayout(self.images_layout)
         
         self.labels_layout=QHBoxLayout()
         self.file_label = QLabel('No file selected', self)
@@ -471,6 +632,12 @@ class UploaderWindow(QWidget):
         
         self.load_credentials()
         
+    @pyqtSlot(str, str)
+    def update_coordinate_in_app(self, lat, lon):   
+        self.camera_location_lat=lat
+        self.camera_location_lon=lon
+        print(f"{self.camera_location_lat=} {self.camera_location_lon=}")
+        
     def on_preset_tab_change(self, index):
         if index==0:
             self.preset = 'place'
@@ -504,6 +671,7 @@ class UploaderWindow(QWidget):
             self.image_label.setPixmap(scaled_pixmap)
             file_url = QUrl.fromLocalFile(self.file_path).toString()
             self.link_label.setText(f'<a href="{file_url}" style="color: #0066cc; text-decoration: underline;">Open original image in system viewer</a>')
+            self.map_widget.add_marker(lat=None, lon=None, markerclass="image")
             self.upload_btn.setEnabled(False)
     
     def presets_fields_as_dict(self) -> dict:
