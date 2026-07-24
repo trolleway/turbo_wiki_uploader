@@ -787,7 +787,7 @@ class UploaderWindow(QWidget):
         target_name = self.filename_input.text()
         
         depicts = self.selected_wikidata_ids()
-        depicts.append(self.selected_wikidata_location_ids()[0])
+
         
         self.save_credentials()
 
