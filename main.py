@@ -60,6 +60,11 @@ class UploadThread(QThread):
             site = mwclient.Site('commons.wikimedia.org', clients_useragent=USERAGENT)
             site.login(self.username, self.password)
             self.log_signal.emit("Login successful.")
+            
+            
+            print(f'{self.depicts=}')
+            print(f'{self.locations=}')
+            quit('halt')
 
 
             self.log_signal.emit(f"Uploading {self.file_name}...")
@@ -381,6 +386,8 @@ class UploaderWindow(QWidget):
         self.initUI()
         
         # Search Logic Setup
+        self.depicts = []
+        self.place_of_creation = ''
 
         
         self.file_path = None
@@ -492,6 +499,27 @@ class UploaderWindow(QWidget):
         self.gen_desc_btn_preset_02.clicked.connect(self.generate_description)
         layout_preset_02.addWidget(self.gen_desc_btn_preset_02)
         tab_preset_02.setLayout(layout_preset_02)
+        
+        # tab3
+        tab_preset_03 = QWidget()
+        layout_preset_03 = QVBoxLayout()
+
+        
+        self.preset_03_cityid = WikidataSearchWidget( placeholder_text="Search for city...",title="City wikidata entity:")
+        layout_preset_03.addWidget(self.preset_03_cityid)
+        self.preset_03_streetid = WikidataSearchWidget( placeholder_text="Search for street...",title="Street wikidata entity:")
+        layout_preset_03.addWidget(self.preset_03_streetid)
+        
+        
+        layout_preset_03.addWidget(QLabel("House number"))
+        self.preset_03_housenumber = QLineEdit()
+        layout_preset_03.addWidget(self.preset_03_housenumber)
+        self.preset_03_housenumber.setStyleSheet(self.css_textedit)
+        
+        self.gen_desc_btn_preset_03 = QPushButton('Generate Description: Building/Address on street', self)
+        self.gen_desc_btn_preset_03.clicked.connect(self.generate_description)
+        layout_preset_03.addWidget(self.gen_desc_btn_preset_02)
+        tab_preset_03.setLayout(layout_preset_03)
 
         # tab group
         self.label_preset_select = QLabel("Preset:")
@@ -499,6 +527,7 @@ class UploaderWindow(QWidget):
         self.tab_presets = QTabWidget()
         self.tab_presets.addTab(tab_preset_01, "Geographic object")
         self.tab_presets.addTab(tab_preset_02, "Object in place")
+        self.tab_presets.addTab(tab_preset_03, "Building/Address on street")
         self.tab_presets.setCurrentIndex(0)
         self.tab_presets.currentChanged.connect(self.on_preset_tab_change)
         self.tab_presets.setStyleSheet(
@@ -636,14 +665,7 @@ class UploaderWindow(QWidget):
         if self.user_input.text() == '':
             QMessageBox.warning(self, "Error", "Please enter a username first.")
             is_invalid_input = True
-        
-        if len(self.selected_wikidata_ids())<1:
-            QMessageBox.warning(self, "Error", "Please select a wikidata objects first.")
-            is_invalid_input = True
-            
-        if len(self.selected_wikidata_location_ids()) < 1 or len(self.selected_wikidata_location_ids()) > 1:
-            QMessageBox.warning(self, "Error", "Please select a one location wikidata objects first.") 
-            is_invalid_input = True
+
             
         if is_invalid_input:
             return
@@ -685,6 +707,8 @@ class UploaderWindow(QWidget):
         # This writes the transferred text into your large QTextEdit
         self.large_desc_output.setText(description_dict['description'])
         self.log_output.append("Template generated successfully.")
+        self.depicts = description_dict['depicts']
+        self.place_of_creation = description_dict['place_of_creation']
         self.upload_btn.setEnabled(True)
         
         
@@ -738,7 +762,7 @@ class UploaderWindow(QWidget):
         self.upload_btn.setEnabled(False)
         self.log_output.append("Starting process...")
 
-        self.thread = UploadThread(username, password, self.file_path, target_name, self.desc_input.toPlainText(),self.large_desc_output.toPlainText(),depicts,self.selected_wikidata_location_ids())
+        self.thread = UploadThread(username, password, self.file_path, target_name, self.desc_input.toPlainText(),self.large_desc_output.toPlainText(),self.depicts,self.place_of_creation)
         self.thread.log_signal.connect(self.log_output.append)
         self.thread.finished_signal.connect(self.on_finished)
         self.thread.start()
@@ -751,19 +775,17 @@ class UploaderWindow(QWidget):
             pass
             QMessageBox.critical(self, "Failed", "An error occurred. Check the log.")
 
-
-
-
-
-    
     def selected_wikidata_ids(self):
         """Returns list of QIDs for use in SDC upload"""
         return self.depicts_search.get_selected_qids()
-        
-            
+    
     def selected_wikidata_location_ids(self):
         """Returns list of QIDs for use in SDC upload"""
         return self.location_search.get_selected_qids()
+
+
+
+
 
 
 if __name__ == '__main__':

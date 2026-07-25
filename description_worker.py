@@ -115,6 +115,7 @@ class DescriptionGenerationThread(QThread):
             except:
                 self.log_signal.emit(f"Error: while reading datetime. The image must have datetime in EXIF")
             ext = os.path.splitext(self.file_path)[1]
+            export_depicts = list()
             
             if self.preset=='place':
                 #categories
@@ -144,7 +145,10 @@ class DescriptionGenerationThread(QThread):
                 commons_filename = commons_filename.strip()
 
                 short_description = ' '.join(ls) + ' ' + l
-                
+                export_place_of_creation_wdid = location_wdobj['id']
+                for wdobj in wdobj_dict.values():
+                    export_depicts.append(wdobj['id'])
+
 
             
             elif self.preset=='thing_in_place':
@@ -194,6 +198,11 @@ class DescriptionGenerationThread(QThread):
                     commons_filename = f"{locname} {ls[0]} {timestamp2}{ext}"
                     short_description = ' '.join(ls) + ' ' + locname
                 commons_filename = commons_filename.strip()
+                
+                
+                export_place_of_creation_wdid = location_wdobj['id']
+                for wdobj in wdobj_dict.values():
+                    export_depicts.append(wdobj['id'])
 
             
             
@@ -235,7 +244,13 @@ class DescriptionGenerationThread(QThread):
 
 
             
-            description_dict={'commons_filename':commons_filename,'description':description,'short_description':short_description}
+            description_dict={
+            'commons_filename':commons_filename,
+            'description':description,
+            'short_description':short_description,
+            'place_of_creation':export_place_of_creation_wdid,
+            'depicts':export_depicts,
+            }
             self.description_generated.emit(description_dict)
 
         except Exception as e:
