@@ -82,26 +82,8 @@ class DescriptionGenerationThread(QThread):
         try:
             if not self.file_path:
                 return
+            description_failed = False
 
-            
-            wdobj_dict=dict()
-            for wikidata_id in self.wikidata_ids:
-                wdobj_dict[wikidata_id] = self.get_wikidata_object(wikidata_id)
-                
-            
-            location_wdobj = self.get_wikidata_object(self.location_wikidata_ids[0])
-            description_failed=False    
-            if 'en' not in location_wdobj['labels']:
-                self.log_signal.emit(f"Error: please add english label to https://www.wikidata.org/wiki/{location_wdobj['id']}")
-                description_failed = True
-            for wdobj in wdobj_dict.values():
-                if 'en' not in wdobj['labels']:
-                    self.log_signal.emit(f"Error: please add english label to https://www.wikidata.org/wiki/{wdobj['id']}")
-                    description_failed = True
-                
-            if description_failed:
-                return
-            
             # descriptions presets
             # now all presets implemented in this method, to make more simple code
             
@@ -204,7 +186,51 @@ class DescriptionGenerationThread(QThread):
                 for wdobj in wdobj_dict.values():
                     export_depicts.append(wdobj['id'])
 
+            elif self.preset=='address':
             
+                #categories
+                categories=list()
+                categories_text=''
+
+                
+                city_wdobj = self.get_wikidata_object(self.preset_fields.get('address_city','')[0])
+                street_wdobj = self.get_wikidata_object(self.preset_fields.get('address_street','')[0])
+                #TODO assert street_wdobj has administrative location
+                
+                
+                categories.append(self.wdobj_category(street_wdobj) )
+                
+                
+                for wdid in self.preset_fields.get('address_depicts'):
+                    wdobj=self.get_wikidata_object(wdid)
+                    #categories.append(self.wdobj_category(wdobj))
+                    category = self.get_category_for_object_in_location(wdobj,street_wdobj)
+                    if category is None:
+                        category = self.wdobj_category(wdobj)
+                    
+                    export_depicts.append(wdobj['id'])    
+                    
+                    self.log_signal.emit(category)
+                    if category is not None:
+                        if 'Category:' not in category:
+                            category = 'Category:'+category
+                        categories.append(category)
+                        category_for_location_needed = False
+
+                categories = [x for x in categories if x is not None]
+                categories = [f"[[{item}]]\n" for item in categories]
+                categories = list(set(categories))
+                
+                if len(categories)>0:
+                    categories_text="\n".join(categories)  
+                    
+                cityname = city_wdobj['labels']['en']['value']
+                streetname = street_wdobj['labels']['en']['value']
+                housenumber = self.preset_fields.get('address_housenumber','')
+                commons_filename = f"{cityname} {streetname} {housenumber} {timestamp2}{ext}"
+                short_description = f"{cityname} {streetname} {housenumber}"
+                export_place_of_creation_wdid = street_wdobj['id']
+
             
 
             

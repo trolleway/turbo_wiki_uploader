@@ -64,7 +64,7 @@ class UploadThread(QThread):
             
             print(f'{self.depicts=}')
             print(f'{self.locations=}')
-            quit('halt')
+
 
 
             self.log_signal.emit(f"Uploading {self.file_name}...")
@@ -76,7 +76,7 @@ class UploadThread(QThread):
             self.log_signal.emit("Upload complete..")
             # 4. Execute the raw API Call (Updates descriptions and claims in one go)
 
-            self.log_signal.emit("Writing Structured Data (Labels/Claims)...")
+            self.log_signal.emit("generate payload for Structured Data (Labels/Claims)...")
             
             payload = {}
 
@@ -92,24 +92,24 @@ class UploadThread(QThread):
             if hasattr(self, 'locations') and self.locations:
                 payload['claims']['P1071'] = []
                 
-                for qid in self.locations:
-                    clean_qid = qid.strip()
-                    if clean_qid.startswith('Q'):
-                        payload['claims']['P1071'].append({
-                            'mainsnak': {
-                                'snaktype': 'value',
-                                'property': 'P1071',
-                                'datavalue': {
-                                    'value': {
-                                        'entity-type': 'item',
-                                        'id': clean_qid
-                                    },
-                                    'type': 'wikibase-entityid'
-                                }
-                            },
-                            'type': 'statement',
-                            'rank': 'normal'
-                        })    
+                qid = self.locations
+                clean_qid = qid.strip()
+                if clean_qid.startswith('Q'):
+                    payload['claims']['P1071'].append({
+                        'mainsnak': {
+                            'snaktype': 'value',
+                            'property': 'P1071',
+                            'datavalue': {
+                                'value': {
+                                    'entity-type': 'item',
+                                    'id': clean_qid
+                                },
+                                'type': 'wikibase-entityid'
+                            }
+                        },
+                        'type': 'statement',
+                        'rank': 'normal'
+                    })    
                         
             if hasattr(self, 'depicts') and self.depicts:
                 payload['claims']['P180'] = []
@@ -503,13 +503,17 @@ class UploaderWindow(QWidget):
         # tab3
         tab_preset_03 = QWidget()
         layout_preset_03 = QVBoxLayout()
+        layout_preset_03h = QHBoxLayout()
 
         
         self.preset_03_cityid = WikidataSearchWidget( placeholder_text="Search for city...",title="City wikidata entity:")
-        layout_preset_03.addWidget(self.preset_03_cityid)
+        layout_preset_03h.addWidget(self.preset_03_cityid)
         self.preset_03_streetid = WikidataSearchWidget( placeholder_text="Search for street...",title="Street wikidata entity:")
-        layout_preset_03.addWidget(self.preset_03_streetid)
+        layout_preset_03h.addWidget(self.preset_03_streetid)
         
+        self.preset_03_depicts = WikidataSearchWidget( placeholder_text="Search for depicts...",title="Depicts (building, appartment building, shop):")
+        layout_preset_03h.addWidget(self.preset_03_depicts)
+        layout_preset_03.addLayout(layout_preset_03h)
         
         layout_preset_03.addWidget(QLabel("House number"))
         self.preset_03_housenumber = QLineEdit()
@@ -609,6 +613,8 @@ class UploaderWindow(QWidget):
             self.preset = 'place'
         if index==1:
             self.preset = 'thing_in_place'
+        if index==2:
+            self.preset = 'address'
         
     def select_file(self):
         settings = QSettings(ORG_NAME, APP_NAME)
@@ -652,6 +658,10 @@ class UploaderWindow(QWidget):
     def presets_fields_as_dict(self) -> dict:
         fields={}
         fields['objectname']=self.preset_02_object_name.text()
+        fields['address_city']=self.preset_03_cityid.get_selected_qids()
+        fields['address_street']=self.preset_03_streetid.get_selected_qids()
+        fields['address_depicts']=self.preset_03_depicts.get_selected_qids()
+        fields['address_housenumber']=self.preset_03_housenumber.text()
         return fields
     def generate_description(self):
         self.upload_btn.setEnabled(False)
