@@ -525,6 +525,40 @@ class UploaderWindow(QWidget):
         layout_preset_03.addWidget(self.gen_desc_btn_preset_02)
         tab_preset_03.setLayout(layout_preset_03)
 
+
+        # tab_automobile
+        tab_preset_automobile = QWidget()
+        layout_preset_automobile = QVBoxLayout()
+        layout_preset_automobileh = QHBoxLayout()
+        layout_preset_automobileh2 = QHBoxLayout()
+
+        layout_preset_automobile.addWidget(QLabel("Automobile on street or in museum. Categories: 'automobiles in location', 'automobile model'"))
+        self.preset_automobile_cityid = WikidataSearchWidget( placeholder_text="Search for city...",title="City wikidata entity:")
+        layout_preset_automobileh.addWidget(self.preset_automobile_cityid)
+        self.preset_automobile_streetid = WikidataSearchWidget( placeholder_text="Search for street...",title="Street wikidata entity:")
+        layout_preset_automobileh.addWidget(self.preset_automobile_streetid)
+        layout_preset_automobile.addLayout(layout_preset_automobileh)
+        
+        self.preset_automobile_model = WikidataSearchWidget( placeholder_text="Search for automobile model...",title="Automobile model")
+        layout_preset_automobileh2.addWidget(self.preset_automobile_model)
+        
+        
+        self.preset_automobile_depicts = WikidataSearchWidget( placeholder_text="Search for depicts...",title="Depicts (building, appartment building, shop):")
+        layout_preset_automobileh2.addWidget(self.preset_automobile_depicts)
+        layout_preset_automobile.addLayout(layout_preset_automobileh)
+        layout_preset_automobile.addLayout(layout_preset_automobileh2)
+        
+        
+        layout_preset_automobile.addWidget(QLabel("Registration plate (optional)"))
+        self.preset_automobile_registration = QLineEdit()
+        layout_preset_automobile.addWidget(self.preset_automobile_registration)
+        self.preset_automobile_registration.setStyleSheet(self.css_textedit)
+        
+        self.gen_desc_btn_preset_automobile = QPushButton('Generate Description: Automobile', self)
+        self.gen_desc_btn_preset_automobile.clicked.connect(self.generate_description)
+        layout_preset_automobile.addWidget(self.gen_desc_btn_preset_automobile)
+        tab_preset_automobile.setLayout(layout_preset_automobile)
+
         # tab group
         self.label_preset_select = QLabel("Preset:")
         right_layout.addWidget(self.label_preset_select)
@@ -532,6 +566,7 @@ class UploaderWindow(QWidget):
         self.tab_presets.addTab(tab_preset_01, "Geographic object")
         self.tab_presets.addTab(tab_preset_02, "Object in place")
         self.tab_presets.addTab(tab_preset_03, "Building/Address on street")
+        self.tab_presets.addTab(tab_preset_automobile, "Automobile")
         self.tab_presets.setCurrentIndex(0)
         self.tab_presets.currentChanged.connect(self.on_preset_tab_change)
         self.tab_presets.setStyleSheet(

@@ -76,6 +76,12 @@ class DescriptionGenerationThread(QThread):
             return 'Category:'+wdobj['claims']['P373'][0]['mainsnak']['datavalue']['value']
         return None
     
+    def check_wdobj_have_adm_loc(self,wdobj):
+        if 'P131' not in wdobj.get('claims',{}):
+            id=wdobj['id']
+            self.log_signal.emit(f"Error: please set P131 for https://www.wikidata.org/wiki/{id}")
+            return False
+        pass
 
     def run(self):
         from datetime import datetime
@@ -196,10 +202,10 @@ class DescriptionGenerationThread(QThread):
                 city_wdobj = self.get_wikidata_object(self.preset_fields.get('address_city','')[0])
                 street_wdobj = self.get_wikidata_object(self.preset_fields.get('address_street','')[0])
                 #TODO assert street_wdobj has administrative location
-                
+                if self.check_wdobj_have_adm_loc(city_wdobj) == False: description_failed = True
+                if self.check_wdobj_have_adm_loc(street_wdobj) == False: description_failed = True
                 
                 categories.append(self.wdobj_category(street_wdobj) )
-                
                 
                 for wdid in self.preset_fields.get('address_depicts'):
                     wdobj=self.get_wikidata_object(wdid)
