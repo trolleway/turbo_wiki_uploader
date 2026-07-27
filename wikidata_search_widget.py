@@ -96,6 +96,7 @@ class WikidataSearchWidget(QWidget):
         # Suggestions List (Hidden by default)
         self.suggestions_list = QListWidget()
         self.suggestions_list.setVisible(False)
+        self.suggestions_list.setMinimumHeight(150)
         self.suggestions_list.setMaximumHeight(150)
         self.suggestions_list.itemClicked.connect(self.add_entity_from_suggestion)
         layout.addWidget(self.suggestions_list)

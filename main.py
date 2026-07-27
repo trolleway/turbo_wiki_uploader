@@ -535,8 +535,8 @@ class UploaderWindow(QWidget):
         layout_preset_automobile.addWidget(QLabel("Automobile on street or in museum. Categories: 'automobiles in location', 'automobile model'"))
         self.preset_automobile_cityid = WikidataSearchWidget( placeholder_text="Search for city...",title="City wikidata entity:")
         layout_preset_automobileh.addWidget(self.preset_automobile_cityid)
-        self.preset_automobile_streetid = WikidataSearchWidget( placeholder_text="Search for street...",title="Street wikidata entity:")
-        layout_preset_automobileh.addWidget(self.preset_automobile_streetid)
+        self.preset_automobile_place = WikidataSearchWidget( placeholder_text="Search for street...",title="Street or place wikidata entity:")
+        layout_preset_automobileh.addWidget(self.preset_automobile_place)
         layout_preset_automobile.addLayout(layout_preset_automobileh)
         
         self.preset_automobile_model = WikidataSearchWidget( placeholder_text="Search for automobile model...",title="Automobile model")
@@ -613,7 +613,7 @@ class UploaderWindow(QWidget):
         self.large_desc_output.setPlaceholderText('Wikitext for file')
         # Size for 20 lines
         font_metrics = self.large_desc_output.fontMetrics()
-        self.large_desc_output.setMinimumHeight(font_metrics.lineSpacing() * 30)
+        self.large_desc_output.setMinimumHeight(font_metrics.lineSpacing() * 10)
         right_layout.addWidget(self.large_desc_output)
         
         
@@ -650,6 +650,8 @@ class UploaderWindow(QWidget):
             self.preset = 'thing_in_place'
         if index==2:
             self.preset = 'address'
+        if index==3:
+            self.preset = 'automobile'    
         
     def select_file(self):
         settings = QSettings(ORG_NAME, APP_NAME)
@@ -697,6 +699,13 @@ class UploaderWindow(QWidget):
         fields['address_street']=self.preset_03_streetid.get_selected_qids()
         fields['address_depicts']=self.preset_03_depicts.get_selected_qids()
         fields['address_housenumber']=self.preset_03_housenumber.text()
+        fields['automobile_city']=self.preset_automobile_cityid.get_selected_qids()
+        fields['automobile_place']=self.preset_automobile_place.get_selected_qids()
+        fields['automobile_depicts']=self.preset_automobile_depicts.get_selected_qids()
+        fields['automobile_model']=self.preset_automobile_model.get_selected_qids()
+        fields['automobile_registration']=self.preset_automobile_registration.text()
+                
+        
         return fields
     def generate_description(self):
         self.upload_btn.setEnabled(False)

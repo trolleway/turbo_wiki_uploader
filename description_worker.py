@@ -81,7 +81,13 @@ class DescriptionGenerationThread(QThread):
             id=wdobj['id']
             self.log_signal.emit(f"Error: please set P131 for https://www.wikidata.org/wiki/{id}")
             return False
-        pass
+
+    def check_wdobj_have_labels(self,wdobj_dict):
+        if 'en' not in wdobj_dict['labels']:
+            id=wdobj['id']
+            self.log_signal.emit(f"Error: please set English label for https://www.wikidata.org/wiki/{id}")
+            return False
+        
 
     def run(self):
         from datetime import datetime
@@ -192,7 +198,7 @@ class DescriptionGenerationThread(QThread):
                 for wdobj in wdobj_dict.values():
                     export_depicts.append(wdobj['id'])
 
-            elif self.preset=='address':
+            elif self.preset=='address':  # noqa: SIM114
             
                 #categories
                 categories=list()
@@ -237,6 +243,59 @@ class DescriptionGenerationThread(QThread):
                 short_description = f"{cityname} {streetname} {housenumber}"
                 export_place_of_creation_wdid = street_wdobj['id']
 
+
+            elif self.preset=='automobile':
+            
+                #categories
+                categories=list()
+                categories_text=''
+
+                
+                city_wdobj = self.get_wikidata_object(self.preset_fields.get('automobile_city','')[0])
+                place_wdobj = self.get_wikidata_object(self.preset_fields.get('automobile_place','')[0])
+                model_wdobj = self.get_wikidata_object(self.preset_fields.get('automobile_model','')[0])
+                                
+                if self.check_wdobj_have_adm_loc(city_wdobj) == False: description_failed = True
+                if self.check_wdobj_have_adm_loc(place_wdobj) == False: description_failed = True
+                if self.check_wdobj_have_labels(place_wdobj) == False: description_failed = True
+                if self.check_wdobj_have_labels(city_wdobj) == False: description_failed = True
+                if self.check_wdobj_have_labels(model_wdobj) == False: description_failed = True                
+                
+                                
+                
+                categories.append(self.wdobj_category(place_wdobj) )
+                
+                for wdid in self.preset_fields.get('automobile_depicts')+ self.preset_fields.get('automobile_model'):
+                    wdobj=self.get_wikidata_object(wdid)
+                    category = self.get_category_for_object_in_location(wdobj,place_wdobj)
+                    if category is None:
+                        category = self.wdobj_category(wdobj)
+                    
+                    export_depicts.append(wdobj['id'])    
+                    
+                    self.log_signal.emit(category)
+                    if category is not None:
+                        if 'Category:' not in category:
+                            category = 'Category:'+category
+                        categories.append(category)
+                        category_for_location_needed = False
+                
+
+                categories = [x for x in categories if x is not None]
+                categories = [f"[[{item}]]\n" for item in categories]
+                categories = list(set(categories))
+                
+                if len(categories)>0:
+                    categories_text="\n".join(categories)  
+                    
+                cityname = city_wdobj['labels']['en']['value']
+                placename = place_wdobj['labels']['en']['value']
+                model = model_wdobj['labels']['en']['value']
+                registration=self.preset_fields.get('automobile_registration','')
+                if registration != '': registration+=' '
+                commons_filename = f"{model} {cityname} {registration}{timestamp2}{ext}"
+                short_description = f"{model} {registration}in {cityname}, {placename}"
+                export_place_of_creation_wdid = place_wdobj['id']
             
 
             
