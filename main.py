@@ -426,15 +426,17 @@ class UploaderWindow(QWidget):
         self.image_label.setStyleSheet("border: 1px dashed #aaa;") 
         self.images_layout.addWidget(self.image_label)
         
+
+        
+        left_layout.addLayout(self.images_layout)
+
         # Map widget
         self.map_widget = MapWidget()
         #self.map_widget.setFixedHeight(400)
-        self.images_layout.addWidget(self.map_widget)
+        left_layout.addWidget(self.map_widget)
         self.map_widget.jsHandler.coordinatesUpdated.connect(
             self.update_coordinate_in_app
         )
-        
-        left_layout.addLayout(self.images_layout)
         
         self.labels_layout=QHBoxLayout()
         self.file_label = QLabel('No file selected', self)
@@ -450,27 +452,6 @@ class UploaderWindow(QWidget):
 
         left_layout.addLayout(self.labels_layout)
 
-        
-        left_layout.addWidget(QLabel("<b>Location or event (Wikidata Entity):</b>"))
-        self.location_search = WikidataSearchWidget(
-            placeholder_text="Type to search for location (e.g., 'Eiffel Tower')...",
-            title="Location or Event (Wikidata Entity):"
-        )
-        #self.location_search.selection_changed.connect(self.on_location_selection_changed)
-        left_layout.addWidget(self.location_search)
-        
-        
-        left_layout.addWidget(QLabel("<b>Depicts (Wikidata Entities):</b>"))
-        self.depicts_search = WikidataSearchWidget(
-            placeholder_text="Type to search for objects (e.g., 'Cat')...",
-            title="Depicts (Wikidata Entities):"
-        )
-        #self.depicts_search.selection_changed.connect(self.on_depicts_selection_changed)
-        left_layout.addWidget(self.depicts_search)
-        
-
- 
-        
 
 
         # RIGHT HALF
@@ -729,8 +710,8 @@ class UploaderWindow(QWidget):
 
         # Initialize the background thread
         self.desc_thread = DescriptionGenerationThread(self.file_path, 
-        username,self.selected_wikidata_ids(),
-        self.selected_wikidata_location_ids(),
+        username,[],
+        [],
         USERAGENT,
         preset=self.preset,
         preset_fields = self.presets_fields_as_dict(),
@@ -828,14 +809,6 @@ class UploaderWindow(QWidget):
         else:
             pass
             QMessageBox.critical(self, "Failed", "An error occurred. Check the log.")
-
-    def selected_wikidata_ids(self):
-        """Returns list of QIDs for use in SDC upload"""
-        return self.depicts_search.get_selected_qids()
-    
-    def selected_wikidata_location_ids(self):
-        """Returns list of QIDs for use in SDC upload"""
-        return self.location_search.get_selected_qids()
 
 
 

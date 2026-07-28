@@ -191,9 +191,10 @@ class WikidataSearchWidget(QWidget):
         remove_btn.setStyleSheet("color: red; font-weight: bold;")
         remove_btn.clicked.connect(lambda: self.remove_entity(data['id'], widget_item))
         
+        hbox.addWidget(remove_btn)
         hbox.addWidget(info_label)
         hbox.addStretch()
-        hbox.addWidget(remove_btn)
+        
         widget.setLayout(hbox)
         
         widget_item = QListWidgetItem(self.selected_list_widget)
