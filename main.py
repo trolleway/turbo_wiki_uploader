@@ -155,7 +155,8 @@ class UploadThread(QThread):
             self.move_file_to_uploaded_dir(self.file_path, uploaded_folder_path)
 
             self.log_signal.emit("Done.")
-            self.log_signal.emit("https://commons.wikimedia.org/wiki/File:"+self.file_name)
+            url="https://commons.wikimedia.org/wiki/File:"+self.file_name
+            self.log_signal.emit(f'<a href="{url}">{url}')
             self.finished_signal.emit(True)
 
         except Exception as e:
@@ -325,7 +326,9 @@ class MapWidget(QWebEngineView):
                 js_code = f"addMarker([{lat}, {lon}],'{markerclass}',false);"
 
         self.page().runJavaScript(js_code)
-    
+        
+        js_code = f"setMapView([{lat}, {lon}], 15);"
+        self.page().runJavaScript(js_code)
 
 
 
@@ -783,7 +786,6 @@ class UploaderWindow(QWidget):
         password = self.pass_input.text()
         target_name = self.filename_input.text()
         
-        depicts = self.selected_wikidata_ids()
 
         
         self.save_credentials()
