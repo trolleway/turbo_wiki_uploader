@@ -110,7 +110,7 @@ class DescriptionGenerationThread(QThread):
                 self.log_signal.emit(f"Error: while reading datetime. The image must have datetime in EXIF")
             ext = os.path.splitext(self.file_path)[1]
             export_depicts = list()
-            
+            wdobj_dict = dict()
             if self.preset=='place':
                 #categories
                 categories=list()
@@ -146,17 +146,29 @@ class DescriptionGenerationThread(QThread):
 
             
             elif self.preset=='thing_in_place':
-            
-                #categories
                 categories=list()
                 categories_text=''
-                category_for_location_needed = True
-                for wdobj in wdobj_dict.values():
-                    #categories.append(self.wdobj_category(wdobj))
-                    category = self.get_category_for_object_in_location(wdobj,location_wdobj)
+
+                
+                place_wdobj = self.get_wikidata_object(self.preset_fields.get('thing_place','')[0])
+                #depicts_wdobj = self.get_wikidata_object(self.preset_fields.get('thing_depicts','')[0])
+                                
+
+                if self.check_wdobj_have_adm_loc(place_wdobj) == False: description_failed = True
+                if self.check_wdobj_have_labels(place_wdobj) == False: description_failed = True
+                #if self.check_wdobj_have_labels(depicts_wdobj) == False: description_failed = True                
+                
+                                
+                
+                categories.append(self.wdobj_category(place_wdobj) )
+                
+                for wdid in self.preset_fields.get('thing_depicts'):
+                    wdobj=self.get_wikidata_object(wdid)
+                    category = self.get_category_for_object_in_location(wdobj,place_wdobj)
                     if category is None:
                         category = self.wdobj_category(wdobj)
                     
+                    export_depicts.append(wdobj['id'])    
                     
                     self.log_signal.emit(category)
                     if category is not None:
@@ -164,27 +176,27 @@ class DescriptionGenerationThread(QThread):
                             category = 'Category:'+category
                         categories.append(category)
                         category_for_location_needed = False
-                if category_for_location_needed:        
-                    categories.append(self.wdobj_category(location_wdobj) )
+                
+
                 categories = [x for x in categories if x is not None]
                 categories = [f"[[{item}]]\n" for item in categories]
                 categories = list(set(categories))
                 
                 if len(categories)>0:
-                    categories_text="\n".join(categories)      
-
+                    categories_text="\n".join(categories)  
                 
-                objectname = self.preset_fields.get('objectname','')
-                
+                objectname = self.preset_fields.get('thing_name','')
                 ls=list()
-                for wikidata_id in self.wikidata_ids:
-                    ls.append(wdobj_dict[wikidata_id]['labels']['en']['value'])    
-                if location_wdobj['labels']['en']['value'] in ls:
+                for wikidata_id in self.preset_fields.get('thing_depicts'):
+                    wdobj_dict[wikidata_id]=self.get_wikidata_object(wikidata_id)
+                    if self.check_wdobj_have_labels(wdobj_dict[wikidata_id]) == False: description_failed = True
+                    ls.append(wdobj_dict[wikidata_id]['labels']['en']['value'])
+                        
+                if place_wdobj['labels']['en']['value'] in ls:
                     locname=''
                 else:
-                    locname=location_wdobj['labels']['en']['value']
+                    locname=place_wdobj['labels']['en']['value']
 
-                    
                 if objectname != '':
                     commons_filename = f"{locname} {objectname} {timestamp2}{ext}"
                     short_description = objectname + ' ' + locname
@@ -192,13 +204,16 @@ class DescriptionGenerationThread(QThread):
                     commons_filename = f"{locname} {ls[0]} {timestamp2}{ext}"
                     short_description = ' '.join(ls) + ' ' + locname
                 commons_filename = commons_filename.strip()
-                
-                
-                export_place_of_creation_wdid = location_wdobj['id']
-                for wdobj in wdobj_dict.values():
-                    export_depicts.append(wdobj['id'])
 
-            elif self.preset=='address':  # noqa: SIM114
+                export_place_of_creation_wdid = place_wdobj['id']
+            
+
+
+            
+            
+               
+
+            elif self.preset=='address':  # noqa: SIM114 что за нога?
             
                 #categories
                 categories=list()

@@ -470,6 +470,7 @@ class UploaderWindow(QWidget):
         tab_preset_01.setLayout(layout_preset_01)
 
         # tab2
+        '''
         tab_preset_02 = QWidget()
         layout_preset_02 = QVBoxLayout()
         layout_preset_02.addWidget(QLabel("Object in museum, object in city"))
@@ -483,6 +484,24 @@ class UploaderWindow(QWidget):
         self.gen_desc_btn_preset_02.clicked.connect(self.generate_description)
         layout_preset_02.addWidget(self.gen_desc_btn_preset_02)
         tab_preset_02.setLayout(layout_preset_02)
+        '''
+        # thing in place
+        tab_preset_thing = QWidget()
+        layout_preset_thing = QVBoxLayout()
+
+        self.preset_thing_name = QLineEdit()
+        layout_preset_thing.addWidget(self.preset_thing_name)
+        self.preset_thing_name.setStyleSheet(self.css_textedit)
+        self.preset_thing_depicts = WikidataSearchWidget( placeholder_text="Search for depicts...",title="Depicts (building, appartment building, shop):")
+        layout_preset_thing.addWidget(self.preset_thing_depicts)
+        self.preset_thing_place = WikidataSearchWidget( placeholder_text="Search for place...",title="Place entity: Street, town, museum, event")
+        layout_preset_thing.addWidget(self.preset_thing_place)
+        
+        self.gen_desc_btn_preset_thing = QPushButton('Generate Description: Object In Place', self)
+        self.gen_desc_btn_preset_thing.clicked.connect(self.generate_description)
+        layout_preset_thing.addWidget(self.gen_desc_btn_preset_thing)
+        tab_preset_thing.setLayout(layout_preset_thing)
+        
         
         # tab3
         tab_preset_03 = QWidget()
@@ -506,7 +525,7 @@ class UploaderWindow(QWidget):
         
         self.gen_desc_btn_preset_03 = QPushButton('Generate Description: Building/Address on street', self)
         self.gen_desc_btn_preset_03.clicked.connect(self.generate_description)
-        layout_preset_03.addWidget(self.gen_desc_btn_preset_02)
+        layout_preset_03.addWidget(self.gen_desc_btn_preset_03)
         tab_preset_03.setLayout(layout_preset_03)
 
 
@@ -548,7 +567,8 @@ class UploaderWindow(QWidget):
         right_layout.addWidget(self.label_preset_select)
         self.tab_presets = QTabWidget()
         self.tab_presets.addTab(tab_preset_01, "Geographic object")
-        self.tab_presets.addTab(tab_preset_02, "Object in place")
+        #self.tab_presets.addTab(tab_preset_02, "Object in place 0")
+        self.tab_presets.addTab(tab_preset_thing, "Object in place")
         self.tab_presets.addTab(tab_preset_03, "Building/Address on street")
         self.tab_presets.addTab(tab_preset_automobile, "Automobile")
         self.tab_presets.setCurrentIndex(0)
@@ -678,7 +698,10 @@ class UploaderWindow(QWidget):
     
     def presets_fields_as_dict(self) -> dict:
         fields={}
-        fields['objectname']=self.preset_02_object_name.text()
+        fields['thing_name']=self.preset_thing_name.text()
+        fields['thing_place']=self.preset_thing_place.get_selected_qids()
+        fields['thing_depicts']=self.preset_thing_depicts.get_selected_qids()        
+        
         fields['address_city']=self.preset_03_cityid.get_selected_qids()
         fields['address_street']=self.preset_03_streetid.get_selected_qids()
         fields['address_depicts']=self.preset_03_depicts.get_selected_qids()
