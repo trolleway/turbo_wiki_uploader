@@ -76,32 +76,26 @@ class DescriptionGenerationThread(QThread):
             return 'Category:'+wdobj['claims']['P373'][0]['mainsnak']['datavalue']['value']
         return None
     
+    def check_wdobj_have_adm_loc(self,wdobj):
+        if 'P131' not in wdobj.get('claims',{}):
+            id=wdobj['id']
+            self.log_signal.emit(f"Error: please set P131 for https://www.wikidata.org/wiki/{id}")
+            return False
+
+    def check_wdobj_have_labels(self,wdobj_dict):
+        if 'en' not in wdobj_dict['labels']:
+            id=wdobj['id']
+            self.log_signal.emit(f"Error: please set English label for https://www.wikidata.org/wiki/{id}")
+            return False
+        
 
     def run(self):
         from datetime import datetime
         try:
             if not self.file_path:
                 return
+            description_failed = False
 
-            
-            wdobj_dict=dict()
-            for wikidata_id in self.wikidata_ids:
-                wdobj_dict[wikidata_id] = self.get_wikidata_object(wikidata_id)
-                
-            
-            location_wdobj = self.get_wikidata_object(self.location_wikidata_ids[0])
-            description_failed=False    
-            if 'en' not in location_wdobj['labels']:
-                self.log_signal.emit(f"Error: please add english label to https://www.wikidata.org/wiki/{location_wdobj['id']}")
-                description_failed = True
-            for wdobj in wdobj_dict.values():
-                if 'en' not in wdobj['labels']:
-                    self.log_signal.emit(f"Error: please add english label to https://www.wikidata.org/wiki/{wdobj['id']}")
-                    description_failed = True
-                
-            if description_failed:
-                return
-            
             # descriptions presets
             # now all presets implemented in this method, to make more simple code
             
@@ -115,7 +109,8 @@ class DescriptionGenerationThread(QThread):
             except:
                 self.log_signal.emit(f"Error: while reading datetime. The image must have datetime in EXIF")
             ext = os.path.splitext(self.file_path)[1]
-            
+            export_depicts = list()
+            wdobj_dict = dict()
             if self.preset=='place':
                 #categories
                 categories=list()
@@ -144,21 +139,36 @@ class DescriptionGenerationThread(QThread):
                 commons_filename = commons_filename.strip()
 
                 short_description = ' '.join(ls) + ' ' + l
-                
+                export_place_of_creation_wdid = location_wdobj['id']
+                for wdobj in wdobj_dict.values():
+                    export_depicts.append(wdobj['id'])
+
 
             
             elif self.preset=='thing_in_place':
-            
-                #categories
                 categories=list()
                 categories_text=''
-                category_for_location_needed = True
-                for wdobj in wdobj_dict.values():
-                    #categories.append(self.wdobj_category(wdobj))
-                    category = self.get_category_for_object_in_location(wdobj,location_wdobj)
+
+                
+                place_wdobj = self.get_wikidata_object(self.preset_fields.get('thing_place','')[0])
+                #depicts_wdobj = self.get_wikidata_object(self.preset_fields.get('thing_depicts','')[0])
+                                
+
+                if self.check_wdobj_have_adm_loc(place_wdobj) == False: description_failed = True
+                if self.check_wdobj_have_labels(place_wdobj) == False: description_failed = True
+                #if self.check_wdobj_have_labels(depicts_wdobj) == False: description_failed = True                
+                
+                                
+                
+                categories.append(self.wdobj_category(place_wdobj) )
+                
+                for wdid in self.preset_fields.get('thing_depicts'):
+                    wdobj=self.get_wikidata_object(wdid)
+                    category = self.get_category_for_object_in_location(wdobj,place_wdobj)
                     if category is None:
                         category = self.wdobj_category(wdobj)
                     
+                    export_depicts.append(wdobj['id'])    
                     
                     self.log_signal.emit(category)
                     if category is not None:
@@ -166,27 +176,27 @@ class DescriptionGenerationThread(QThread):
                             category = 'Category:'+category
                         categories.append(category)
                         category_for_location_needed = False
-                if category_for_location_needed:        
-                    categories.append(self.wdobj_category(location_wdobj) )
+                
+
                 categories = [x for x in categories if x is not None]
                 categories = [f"[[{item}]]\n" for item in categories]
                 categories = list(set(categories))
                 
                 if len(categories)>0:
-                    categories_text="\n".join(categories)      
-
+                    categories_text="\n".join(categories)  
                 
-                objectname = self.preset_fields.get('objectname','')
-                
+                objectname = self.preset_fields.get('thing_name','')
                 ls=list()
-                for wikidata_id in self.wikidata_ids:
-                    ls.append(wdobj_dict[wikidata_id]['labels']['en']['value'])    
-                if location_wdobj['labels']['en']['value'] in ls:
+                for wikidata_id in self.preset_fields.get('thing_depicts'):
+                    wdobj_dict[wikidata_id]=self.get_wikidata_object(wikidata_id)
+                    if self.check_wdobj_have_labels(wdobj_dict[wikidata_id]) == False: description_failed = True
+                    ls.append(wdobj_dict[wikidata_id]['labels']['en']['value'])
+                        
+                if place_wdobj['labels']['en']['value'] in ls:
                     locname=''
                 else:
-                    locname=location_wdobj['labels']['en']['value']
+                    locname=place_wdobj['labels']['en']['value']
 
-                    
                 if objectname != '':
                     commons_filename = f"{locname} {objectname} {timestamp2}{ext}"
                     short_description = objectname + ' ' + locname
@@ -195,7 +205,112 @@ class DescriptionGenerationThread(QThread):
                     short_description = ' '.join(ls) + ' ' + locname
                 commons_filename = commons_filename.strip()
 
+                export_place_of_creation_wdid = place_wdobj['id']
             
+
+
+            
+            
+               
+
+            elif self.preset=='address':  # noqa: SIM114 что за нога?
+            
+                #categories
+                categories=list()
+                categories_text=''
+
+                
+                city_wdobj = self.get_wikidata_object(self.preset_fields.get('address_city','')[0])
+                street_wdobj = self.get_wikidata_object(self.preset_fields.get('address_street','')[0])
+                #TODO assert street_wdobj has administrative location
+                if self.check_wdobj_have_adm_loc(city_wdobj) == False: description_failed = True
+                if self.check_wdobj_have_adm_loc(street_wdobj) == False: description_failed = True
+                
+                categories.append(self.wdobj_category(street_wdobj) )
+                
+                for wdid in self.preset_fields.get('address_depicts'):
+                    wdobj=self.get_wikidata_object(wdid)
+                    #categories.append(self.wdobj_category(wdobj))
+                    category = self.get_category_for_object_in_location(wdobj,street_wdobj)
+                    if category is None:
+                        category = self.wdobj_category(wdobj)
+                    
+                    export_depicts.append(wdobj['id'])    
+                    
+                    self.log_signal.emit(category)
+                    if category is not None:
+                        if 'Category:' not in category:
+                            category = 'Category:'+category
+                        categories.append(category)
+                        category_for_location_needed = False
+
+                categories = [x for x in categories if x is not None]
+                categories = [f"[[{item}]]\n" for item in categories]
+                categories = list(set(categories))
+                
+                if len(categories)>0:
+                    categories_text="\n".join(categories)  
+                    
+                cityname = city_wdobj['labels']['en']['value']
+                streetname = street_wdobj['labels']['en']['value']
+                housenumber = self.preset_fields.get('address_housenumber','')
+                commons_filename = f"{cityname} {streetname} {housenumber} {timestamp2}{ext}"
+                short_description = f"{cityname} {streetname} {housenumber}"
+                export_place_of_creation_wdid = street_wdobj['id']
+
+
+            elif self.preset=='automobile':
+            
+                #categories
+                categories=list()
+                categories_text=''
+
+                
+                city_wdobj = self.get_wikidata_object(self.preset_fields.get('automobile_city','')[0])
+                place_wdobj = self.get_wikidata_object(self.preset_fields.get('automobile_place','')[0])
+                model_wdobj = self.get_wikidata_object(self.preset_fields.get('automobile_model','')[0])
+                                
+                if self.check_wdobj_have_adm_loc(city_wdobj) == False: description_failed = True
+                if self.check_wdobj_have_adm_loc(place_wdobj) == False: description_failed = True
+                if self.check_wdobj_have_labels(place_wdobj) == False: description_failed = True
+                if self.check_wdobj_have_labels(city_wdobj) == False: description_failed = True
+                if self.check_wdobj_have_labels(model_wdobj) == False: description_failed = True                
+                
+                                
+                
+                categories.append(self.wdobj_category(place_wdobj) )
+                
+                for wdid in self.preset_fields.get('automobile_depicts')+ self.preset_fields.get('automobile_model'):
+                    wdobj=self.get_wikidata_object(wdid)
+                    category = self.get_category_for_object_in_location(wdobj,place_wdobj)
+                    if category is None:
+                        category = self.wdobj_category(wdobj)
+                    
+                    export_depicts.append(wdobj['id'])    
+                    
+                    self.log_signal.emit(category)
+                    if category is not None:
+                        if 'Category:' not in category:
+                            category = 'Category:'+category
+                        categories.append(category)
+                        category_for_location_needed = False
+                
+
+                categories = [x for x in categories if x is not None]
+                categories = [f"[[{item}]]\n" for item in categories]
+                categories = list(set(categories))
+                
+                if len(categories)>0:
+                    categories_text="\n".join(categories)  
+                    
+                cityname = city_wdobj['labels']['en']['value']
+                placename = place_wdobj['labels']['en']['value']
+                model = model_wdobj['labels']['en']['value']
+                registration=self.preset_fields.get('automobile_registration','')
+                if registration != '': registration+=' '
+                commons_filename = f"{model} {cityname} {registration}{timestamp2}{ext}"
+                short_description = f"{model} {registration}in {cityname}, {placename}"
+                export_place_of_creation_wdid = place_wdobj['id']
             
 
             
@@ -235,7 +350,13 @@ class DescriptionGenerationThread(QThread):
 
 
             
-            description_dict={'commons_filename':commons_filename,'description':description,'short_description':short_description}
+            description_dict={
+            'commons_filename':commons_filename,
+            'description':description,
+            'short_description':short_description,
+            'place_of_creation':export_place_of_creation_wdid,
+            'depicts':export_depicts,
+            }
             self.description_generated.emit(description_dict)
 
         except Exception as e:

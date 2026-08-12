@@ -26,6 +26,7 @@ import shutil
 from PyQt6.QtCore import QSettings
 
 from description_worker import DescriptionGenerationThread
+from wikidata_search_widget import WikidataSearchWidget
 
 
 ORG_NAME = "trolleway"
@@ -59,6 +60,11 @@ class UploadThread(QThread):
             site = mwclient.Site('commons.wikimedia.org', clients_useragent=USERAGENT)
             site.login(self.username, self.password)
             self.log_signal.emit("Login successful.")
+            
+            
+            print(f'{self.depicts=}')
+            print(f'{self.locations=}')
+
 
 
             self.log_signal.emit(f"Uploading {self.file_name}...")
@@ -70,7 +76,7 @@ class UploadThread(QThread):
             self.log_signal.emit("Upload complete..")
             # 4. Execute the raw API Call (Updates descriptions and claims in one go)
 
-            self.log_signal.emit("Writing Structured Data (Labels/Claims)...")
+            self.log_signal.emit("generate payload for Structured Data (Labels/Claims)...")
             
             payload = {}
 
@@ -86,24 +92,24 @@ class UploadThread(QThread):
             if hasattr(self, 'locations') and self.locations:
                 payload['claims']['P1071'] = []
                 
-                for qid in self.locations:
-                    clean_qid = qid.strip()
-                    if clean_qid.startswith('Q'):
-                        payload['claims']['P1071'].append({
-                            'mainsnak': {
-                                'snaktype': 'value',
-                                'property': 'P1071',
-                                'datavalue': {
-                                    'value': {
-                                        'entity-type': 'item',
-                                        'id': clean_qid
-                                    },
-                                    'type': 'wikibase-entityid'
-                                }
-                            },
-                            'type': 'statement',
-                            'rank': 'normal'
-                        })    
+                qid = self.locations
+                clean_qid = qid.strip()
+                if clean_qid.startswith('Q'):
+                    payload['claims']['P1071'].append({
+                        'mainsnak': {
+                            'snaktype': 'value',
+                            'property': 'P1071',
+                            'datavalue': {
+                                'value': {
+                                    'entity-type': 'item',
+                                    'id': clean_qid
+                                },
+                                'type': 'wikibase-entityid'
+                            }
+                        },
+                        'type': 'statement',
+                        'rank': 'normal'
+                    })    
                         
             if hasattr(self, 'depicts') and self.depicts:
                 payload['claims']['P180'] = []
@@ -149,7 +155,8 @@ class UploadThread(QThread):
             self.move_file_to_uploaded_dir(self.file_path, uploaded_folder_path)
 
             self.log_signal.emit("Done.")
-            self.log_signal.emit("https://commons.wikimedia.org/wiki/File:"+self.file_name)
+            url="https://commons.wikimedia.org/wiki/File:"+self.file_name
+            self.log_signal.emit(f'<a href="{url}">{url}')
             self.finished_signal.emit(True)
 
         except Exception as e:
@@ -319,7 +326,9 @@ class MapWidget(QWebEngineView):
                 js_code = f"addMarker([{lat}, {lon}],'{markerclass}',false);"
 
         self.page().runJavaScript(js_code)
-    
+        
+        js_code = f"setMapView([{lat}, {lon}], 15);"
+        self.page().runJavaScript(js_code)
 
 
 
@@ -372,8 +381,7 @@ class WikidataSearcher(QThread):
 class UploaderWindow(QWidget):
     def __init__(self):
         super().__init__()
-        self.selected_entities = [] # Stores dicts: {'id': 'Q..', 'label': '..'}
-        self.selected_entities_location = [] # Stores dicts: {'id': 'Q..', 'label': '..'}
+
         self.camera_location_lat = ''
         self.camera_location_lon = ''
         
@@ -381,20 +389,10 @@ class UploaderWindow(QWidget):
         self.initUI()
         
         # Search Logic Setup
-        self.search_thread_location = WikidataSearcher()
-        self.search_thread_location.results_found.connect(self.on_search_results_location)
-        self.search_thread = WikidataSearcher()
-        self.search_thread.results_found.connect(self.on_search_results)
+        self.depicts = []
+        self.place_of_creation = ''
+
         
-        # Debounce Timer (prevents searching on every single keystroke)
-        self.debounce_timer_location = QTimer()
-        self.debounce_timer_location.setSingleShot(True)
-        self.debounce_timer_location.setInterval(400) # Wait 400ms after user stops typing
-        self.debounce_timer_location.timeout.connect(self.start_search_location)
-        self.debounce_timer = QTimer()
-        self.debounce_timer.setSingleShot(True)
-        self.debounce_timer.setInterval(400) # Wait 400ms after user stops typing
-        self.debounce_timer.timeout.connect(self.start_search)
         self.file_path = None
         self.preset = 'place'
 
@@ -431,15 +429,17 @@ class UploaderWindow(QWidget):
         self.image_label.setStyleSheet("border: 1px dashed #aaa;") 
         self.images_layout.addWidget(self.image_label)
         
+
+        
+        left_layout.addLayout(self.images_layout)
+
         # Map widget
         self.map_widget = MapWidget()
         #self.map_widget.setFixedHeight(400)
-        self.images_layout.addWidget(self.map_widget)
+        left_layout.addWidget(self.map_widget)
         self.map_widget.jsHandler.coordinatesUpdated.connect(
             self.update_coordinate_in_app
         )
-        
-        left_layout.addLayout(self.images_layout)
         
         self.labels_layout=QHBoxLayout()
         self.file_label = QLabel('No file selected', self)
@@ -455,77 +455,6 @@ class UploaderWindow(QWidget):
 
         left_layout.addLayout(self.labels_layout)
 
-        
-        left_layout.addWidget(QLabel("<b>Location or event (Wikidata Entity):</b>"))
-        self.search_input_location = QLineEdit()
-        self.search_input_location.setPlaceholderText("Type to search (e.g., 'Eiffel Tower', 'Abbey road')...")
-        self.search_input_location.textChanged.connect(self.on_text_changed_location)
-        left_layout.addWidget(self.search_input_location)
-
-        # Suggestions List (Hidden by default)
-        self.suggestions_list_location = QListWidget()
-        self.suggestions_list_location.setVisible(False)
-        self.suggestions_list_location.setMaximumHeight(150)
-        self.suggestions_list_location.itemClicked.connect(self.add_entity_from_suggestion_location)
-        left_layout.addWidget(self.suggestions_list_location)
- 
-        # Selected Entities List
-        self.selected_list_location_widget = QListWidget()
-        self.selected_list_location_widget.setSelectionMode(QAbstractItemView.SelectionMode.NoSelection)
-        # Apply some styling to make it look like a list of tags
-        self.selected_list_location_widget.setStyleSheet(f"""
-            QListWidget {{
-                background-color: {YELLOW4FORM};
-                border: 1px solid #ccc;
-                border-radius: 4px;
-            }}
-            QListWidget::item {{
-                border-bottom: 1px solid #e0e0e0;
-                padding: 5px;
-            }}
-
-        """)
-        left_layout.addWidget(QLabel("Selected Location:"))
-        left_layout.addWidget(self.selected_list_location_widget)
-
- 
-        
-        left_layout.addWidget(QLabel("<b>Depicts (Wikidata Entities):</b>"))
-
-        #  Search Input
-        self.search_input = QLineEdit()
-        self.search_input.setPlaceholderText("Type to search (e.g., 'Cat')...")
-        self.search_input.textChanged.connect(self.on_text_changed)
-        left_layout.addWidget(self.search_input)
-
-        # Suggestions List (Hidden by default)
-        self.suggestions_list = QListWidget()
-        self.suggestions_list.setVisible(False)
-        self.suggestions_list.setMaximumHeight(150)
-        self.suggestions_list.itemClicked.connect(self.add_entity_from_suggestion)
-        left_layout.addWidget(self.suggestions_list)
-
-        # 4. Selected Entities List
-        self.selected_list_widget = QListWidget()
-        self.selected_list_widget.setSelectionMode(QAbstractItemView.SelectionMode.NoSelection)
-        # Apply some styling to make it look like a list of tags
-        self.selected_list_widget.setStyleSheet(f"""
-            QListWidget {{
-                background-color: {YELLOW4FORM};
-                border: 1px solid #ccc;
-                border-radius: 4px;
-            }}
-            QListWidget::item {{
-                border-bottom: 1px solid #e0e0e0;
-                padding: 5px;
-            }}
-
-        """)
-        #self.selected_list_widget.setStyleSheet("QListWidget { background-color: "+ YELLOW4FORM+"; color: white; }")
-        #self.desc_input.setStyleSheet(f"background-color: {YELLOW4FORM}; color: {BLACK4FORM}; placeholder-text-color: {GRAY4FORM};")
-        left_layout.addWidget(QLabel("Selected Entities:"))
-        left_layout.addWidget(self.selected_list_widget)
-        
 
 
         # RIGHT HALF
@@ -541,6 +470,7 @@ class UploaderWindow(QWidget):
         tab_preset_01.setLayout(layout_preset_01)
 
         # tab2
+        '''
         tab_preset_02 = QWidget()
         layout_preset_02 = QVBoxLayout()
         layout_preset_02.addWidget(QLabel("Object in museum, object in city"))
@@ -554,13 +484,93 @@ class UploaderWindow(QWidget):
         self.gen_desc_btn_preset_02.clicked.connect(self.generate_description)
         layout_preset_02.addWidget(self.gen_desc_btn_preset_02)
         tab_preset_02.setLayout(layout_preset_02)
+        '''
+        # thing in place
+        tab_preset_thing = QWidget()
+        layout_preset_thing = QVBoxLayout()
+
+        self.preset_thing_name = QLineEdit()
+        layout_preset_thing.addWidget(self.preset_thing_name)
+        self.preset_thing_name.setStyleSheet(self.css_textedit)
+        self.preset_thing_depicts = WikidataSearchWidget( placeholder_text="Search for depicts...",title="Depicts (building, appartment building, shop):")
+        layout_preset_thing.addWidget(self.preset_thing_depicts)
+        self.preset_thing_place = WikidataSearchWidget( placeholder_text="Search for place...",title="Place entity: Street, town, museum, event")
+        layout_preset_thing.addWidget(self.preset_thing_place)
+        
+        self.gen_desc_btn_preset_thing = QPushButton('Generate Description: Object In Place', self)
+        self.gen_desc_btn_preset_thing.clicked.connect(self.generate_description)
+        layout_preset_thing.addWidget(self.gen_desc_btn_preset_thing)
+        tab_preset_thing.setLayout(layout_preset_thing)
+        
+        
+        # tab3
+        tab_preset_03 = QWidget()
+        layout_preset_03 = QVBoxLayout()
+        layout_preset_03h = QHBoxLayout()
+
+        
+        self.preset_03_cityid = WikidataSearchWidget( placeholder_text="Search for city...",title="City wikidata entity:")
+        layout_preset_03h.addWidget(self.preset_03_cityid)
+        self.preset_03_streetid = WikidataSearchWidget( placeholder_text="Search for street...",title="Street wikidata entity:")
+        layout_preset_03h.addWidget(self.preset_03_streetid)
+        
+        self.preset_03_depicts = WikidataSearchWidget( placeholder_text="Search for depicts...",title="Depicts (building, appartment building, shop):")
+        layout_preset_03h.addWidget(self.preset_03_depicts)
+        layout_preset_03.addLayout(layout_preset_03h)
+        
+        layout_preset_03.addWidget(QLabel("House number"))
+        self.preset_03_housenumber = QLineEdit()
+        layout_preset_03.addWidget(self.preset_03_housenumber)
+        self.preset_03_housenumber.setStyleSheet(self.css_textedit)
+        
+        self.gen_desc_btn_preset_03 = QPushButton('Generate Description: Building/Address on street', self)
+        self.gen_desc_btn_preset_03.clicked.connect(self.generate_description)
+        layout_preset_03.addWidget(self.gen_desc_btn_preset_03)
+        tab_preset_03.setLayout(layout_preset_03)
+
+
+        # tab_automobile
+        tab_preset_automobile = QWidget()
+        layout_preset_automobile = QVBoxLayout()
+        layout_preset_automobileh = QHBoxLayout()
+        layout_preset_automobileh2 = QHBoxLayout()
+
+        layout_preset_automobile.addWidget(QLabel("Automobile on street or in museum. Categories: 'automobiles in location', 'automobile model'"))
+        self.preset_automobile_cityid = WikidataSearchWidget( placeholder_text="Search for city...",title="City wikidata entity:")
+        layout_preset_automobileh.addWidget(self.preset_automobile_cityid)
+        self.preset_automobile_place = WikidataSearchWidget( placeholder_text="Search for street...",title="Street or place wikidata entity:")
+        layout_preset_automobileh.addWidget(self.preset_automobile_place)
+        layout_preset_automobile.addLayout(layout_preset_automobileh)
+        
+        self.preset_automobile_model = WikidataSearchWidget( placeholder_text="Search for automobile model...",title="Automobile model")
+        layout_preset_automobileh2.addWidget(self.preset_automobile_model)
+        
+        
+        self.preset_automobile_depicts = WikidataSearchWidget( placeholder_text="Search for depicts...",title="Depicts (building, appartment building, shop):")
+        layout_preset_automobileh2.addWidget(self.preset_automobile_depicts)
+        layout_preset_automobile.addLayout(layout_preset_automobileh)
+        layout_preset_automobile.addLayout(layout_preset_automobileh2)
+        
+        
+        layout_preset_automobile.addWidget(QLabel("Registration plate (optional)"))
+        self.preset_automobile_registration = QLineEdit()
+        layout_preset_automobile.addWidget(self.preset_automobile_registration)
+        self.preset_automobile_registration.setStyleSheet(self.css_textedit)
+        
+        self.gen_desc_btn_preset_automobile = QPushButton('Generate Description: Automobile', self)
+        self.gen_desc_btn_preset_automobile.clicked.connect(self.generate_description)
+        layout_preset_automobile.addWidget(self.gen_desc_btn_preset_automobile)
+        tab_preset_automobile.setLayout(layout_preset_automobile)
 
         # tab group
         self.label_preset_select = QLabel("Preset:")
         right_layout.addWidget(self.label_preset_select)
         self.tab_presets = QTabWidget()
         self.tab_presets.addTab(tab_preset_01, "Geographic object")
-        self.tab_presets.addTab(tab_preset_02, "Object in place")
+        #self.tab_presets.addTab(tab_preset_02, "Object in place 0")
+        self.tab_presets.addTab(tab_preset_thing, "Object in place")
+        self.tab_presets.addTab(tab_preset_03, "Building/Address on street")
+        self.tab_presets.addTab(tab_preset_automobile, "Automobile")
         self.tab_presets.setCurrentIndex(0)
         self.tab_presets.currentChanged.connect(self.on_preset_tab_change)
         self.tab_presets.setStyleSheet(
@@ -607,7 +617,7 @@ class UploaderWindow(QWidget):
         self.large_desc_output.setPlaceholderText('Wikitext for file')
         # Size for 20 lines
         font_metrics = self.large_desc_output.fontMetrics()
-        self.large_desc_output.setMinimumHeight(font_metrics.lineSpacing() * 30)
+        self.large_desc_output.setMinimumHeight(font_metrics.lineSpacing() * 10)
         right_layout.addWidget(self.large_desc_output)
         
         
@@ -642,6 +652,10 @@ class UploaderWindow(QWidget):
             self.preset = 'place'
         if index==1:
             self.preset = 'thing_in_place'
+        if index==2:
+            self.preset = 'address'
+        if index==3:
+            self.preset = 'automobile'    
         
     def select_file(self):
         settings = QSettings(ORG_NAME, APP_NAME)
@@ -684,7 +698,21 @@ class UploaderWindow(QWidget):
     
     def presets_fields_as_dict(self) -> dict:
         fields={}
-        fields['objectname']=self.preset_02_object_name.text()
+        fields['thing_name']=self.preset_thing_name.text()
+        fields['thing_place']=self.preset_thing_place.get_selected_qids()
+        fields['thing_depicts']=self.preset_thing_depicts.get_selected_qids()        
+        
+        fields['address_city']=self.preset_03_cityid.get_selected_qids()
+        fields['address_street']=self.preset_03_streetid.get_selected_qids()
+        fields['address_depicts']=self.preset_03_depicts.get_selected_qids()
+        fields['address_housenumber']=self.preset_03_housenumber.text()
+        fields['automobile_city']=self.preset_automobile_cityid.get_selected_qids()
+        fields['automobile_place']=self.preset_automobile_place.get_selected_qids()
+        fields['automobile_depicts']=self.preset_automobile_depicts.get_selected_qids()
+        fields['automobile_model']=self.preset_automobile_model.get_selected_qids()
+        fields['automobile_registration']=self.preset_automobile_registration.text()
+                
+        
         return fields
     def generate_description(self):
         self.upload_btn.setEnabled(False)
@@ -698,14 +726,7 @@ class UploaderWindow(QWidget):
         if self.user_input.text() == '':
             QMessageBox.warning(self, "Error", "Please enter a username first.")
             is_invalid_input = True
-        
-        if len(self.selected_wikidata_ids())<1:
-            QMessageBox.warning(self, "Error", "Please select a wikidata objects first.")
-            is_invalid_input = True
-            
-        if len(self.selected_wikidata_location_ids()) < 1 or len(self.selected_wikidata_location_ids()) > 1:
-            QMessageBox.warning(self, "Error", "Please select a one location wikidata objects first.") 
-            is_invalid_input = True
+
             
         if is_invalid_input:
             return
@@ -715,8 +736,8 @@ class UploaderWindow(QWidget):
 
         # Initialize the background thread
         self.desc_thread = DescriptionGenerationThread(self.file_path, 
-        username,self.selected_wikidata_ids(),
-        self.selected_wikidata_location_ids(),
+        username,[],
+        [],
         USERAGENT,
         preset=self.preset,
         preset_fields = self.presets_fields_as_dict(),
@@ -747,6 +768,8 @@ class UploaderWindow(QWidget):
         # This writes the transferred text into your large QTextEdit
         self.large_desc_output.setText(description_dict['description'])
         self.log_output.append("Template generated successfully.")
+        self.depicts = description_dict['depicts']
+        self.place_of_creation = description_dict['place_of_creation']
         self.upload_btn.setEnabled(True)
         
         
@@ -786,7 +809,6 @@ class UploaderWindow(QWidget):
         password = self.pass_input.text()
         target_name = self.filename_input.text()
         
-        depicts = self.selected_wikidata_ids()
 
         
         self.save_credentials()
@@ -800,7 +822,7 @@ class UploaderWindow(QWidget):
         self.upload_btn.setEnabled(False)
         self.log_output.append("Starting process...")
 
-        self.thread = UploadThread(username, password, self.file_path, target_name, self.desc_input.toPlainText(),self.large_desc_output.toPlainText(),depicts,self.selected_wikidata_location_ids())
+        self.thread = UploadThread(username, password, self.file_path, target_name, self.desc_input.toPlainText(),self.large_desc_output.toPlainText(),self.depicts,self.place_of_creation)
         self.thread.log_signal.connect(self.log_output.append)
         self.thread.finished_signal.connect(self.on_finished)
         self.thread.start()
@@ -813,220 +835,9 @@ class UploaderWindow(QWidget):
             pass
             QMessageBox.critical(self, "Failed", "An error occurred. Check the log.")
 
-    ##### Search wikidata entities
-    
-    def on_text_changed(self, text):
 
-        if len(text.strip()) < 2:
-            self.suggestions_list.hide()
-            self.debounce_timer.stop()
-            return
-        
-        # Reset timer on every keypress
-        self.debounce_timer.start()
-            
-    def on_text_changed_location(self, text):
 
-        if len(text.strip()) < 2:
-            self.suggestions_list_location.hide()
-            self.debounce_timer_location.stop()
-            return
-        
-        # Reset timer on every keypress
-        self.debounce_timer_location.start()
-        
 
-    def add_entity_from_suggestion(self, item):
-        data = item.data(Qt.ItemDataRole.UserRole)
-        qid = data.get('id')
-
-        # Prevent duplicates
-        if any(e['id'] == qid for e in self.selected_entities):
-            self.suggestions_list.hide()
-            self.search_input.clear()
-            return
-
-        self.selected_entities.append(data)
-        
-        # Create a custom widget for the selected item (Label + Remove Button)
-        self.add_selected_item_widget(data)
-        
-        # Reset Search
-        self.search_input.clear()
-        self.suggestions_list.hide()
-        
-    def add_entity_from_suggestion_location(self, item):
-        data = item.data(Qt.ItemDataRole.UserRole)
-        qid = data.get('id')
-
-        # Prevent duplicates
-        if any(e['id'] == qid for e in self.selected_entities_location):
-            self.suggestions_list_location.hide()
-            self.search_input_location.clear()
-            return
-
-        self.selected_entities_location.append(data)
-        
-        # Create a custom widget for the selected item (Label + Remove Button)
-        self.add_selected_item_widget_location(data)
-        
-        # Reset Search
-        self.search_input.clear()
-        self.suggestions_list.hide()
- 
-    def start_search(self):
-        query = self.search_input.text().strip()
-        if query:
-            self.suggestions_list.clear()
-            self.search_thread.search(query) 
-    def start_search_location(self):
-        query = self.search_input_location.text().strip()
-        if query:
-            self.suggestions_list.clear()
-            self.search_thread_location.search(query)
-
-    def on_search_results(self, results):
-        self.suggestions_list.clear()
-        
-        if not results:
-            self.suggestions_list.hide()
-            return
-
-        self.suggestions_list.setVisible(True)
-        for item in results:
-            # Format: Label (QID) - Description
-            label = item.get('label', 'No Label')
-            qid = item.get('id')
-            desc = item.get('description', 'No description available')
-            
-            display_text = f"{label} ({qid})\t   ↳ {desc}"
-            
-            list_item = QListWidgetItem(display_text)
-            # Store the actual data in the item for retrieval later
-            list_item.setData(Qt.ItemDataRole.UserRole, item)
-            self.suggestions_list.addItem(list_item)
-
-    def on_search_results_location(self, results):
-        self.suggestions_list_location.clear()
-        
-        if not results:
-            self.suggestions_list_location.hide()
-            return
-
-        self.suggestions_list_location.setVisible(True)
-        for item in results:
-            # Format: Label (QID) - Description
-            label = item.get('label', 'No Label')
-            qid = item.get('id')
-            desc = item.get('description', 'No description available')
-            
-            display_text = f"{label} ({qid})\t   ↳ {desc}"
-            
-            list_item = QListWidgetItem(display_text)
-            # Store the actual data in the item for retrieval later
-            list_item.setData(Qt.ItemDataRole.UserRole, item)
-            self.suggestions_list_location.addItem(list_item)
-
-    def add_entity_from_suggestion(self, item):
-        data = item.data(Qt.ItemDataRole.UserRole)
-        qid = data.get('id')
-
-        # Prevent duplicates
-        if any(e['id'] == qid for e in self.selected_entities):
-            self.suggestions_list.hide()
-            self.search_input.clear()
-            return
-
-        self.selected_entities.append(data)
-        
-        # Create a custom widget for the selected item (Label + Remove Button)
-        self.add_selected_item_widget(data)
-        
-        # Reset Search
-        self.search_input.clear()
-        self.suggestions_list.hide()
-
-    def add_selected_item_widget(self, data):
-        # Create a widget to hold the info and the delete button
-        widget = QWidget()
-        hbox = QHBoxLayout()
-        hbox.setContentsMargins(5, 5, 5, 5)
-        
-        label_text = f"<b>{data.get('label', 'Unknown')}</b> ({data.get('id')})"
-        desc_text = data.get('description', '')
-        if desc_text:
-            label_text += f"<br><small style='color:gray'>{desc_text}</small>"
-            
-        info_label = QLabel(label_text)
-        info_label.setTextFormat(Qt.TextFormat.RichText)
-        
-        remove_btn = QPushButton("✕")
-        remove_btn.setFixedSize(24, 24)
-        remove_btn.setStyleSheet("color: red; font-weight: bold;")
-        remove_btn.clicked.connect(lambda: self.remove_entity(data['id'], widget_item))
-
-        hbox.addWidget(info_label)
-        hbox.addStretch()
-        hbox.addWidget(remove_btn)
-        widget.setLayout(hbox)
-
-        # Add to the list widget
-        widget_item = QListWidgetItem(self.selected_list_widget)
-        widget_item.setSizeHint(widget.sizeHint())
-        self.selected_list_widget.setItemWidget(widget_item, widget)
-
-    def add_selected_item_widget_location(self, data):
-        # Create a widget to hold the info and the delete button
-        widget = QWidget()
-        hbox = QHBoxLayout()
-        hbox.setContentsMargins(5, 5, 5, 5)
-        
-        label_text = f"<b>{data.get('label', 'Unknown')}</b> ({data.get('id')})"
-        desc_text = data.get('description', '')
-        if desc_text:
-            label_text += f"<br><small style='color:gray'>{desc_text}</small>"
-            
-        info_label = QLabel(label_text)
-        info_label.setTextFormat(Qt.TextFormat.RichText)
-        
-        remove_btn = QPushButton("✕")
-        remove_btn.setFixedSize(24, 24)
-        remove_btn.setStyleSheet("color: red; font-weight: bold;")
-        remove_btn.clicked.connect(lambda: self.remove_entity_location(data['id'], widget_item))
-
-        hbox.addWidget(info_label)
-        hbox.addStretch()
-        hbox.addWidget(remove_btn)
-        widget.setLayout(hbox)
-
-        # Add to the list widget
-        widget_item = QListWidgetItem(self.selected_list_location_widget)
-        widget_item.setSizeHint(widget.sizeHint())
-        self.selected_list_location_widget.setItemWidget(widget_item, widget)
-
-    def remove_entity(self, qid, widget_item):
-        # Remove from data list
-        self.selected_entities = [e for e in self.selected_entities if e['id'] != qid]
-        
-        # Remove from UI
-        row = self.selected_list_widget.row(widget_item)
-        self.selected_list_widget.takeItem(row)
-    def remove_entity_location(self, qid, widget_item):
-        # Remove from data list
-        self.selected_entities_location = [e for e in self.selected_entities_location if e['id'] != qid]
-        
-        # Remove from UI
-        row = self.selected_list_location_widget.row(widget_item)
-        self.selected_list_location_widget.takeItem(row)
-    
-    def selected_wikidata_ids(self):
-        """Returns list of QIDs for use in SDC upload"""
-        return [e['id'] for e in self.selected_entities]
-        
-            
-    def selected_wikidata_location_ids(self):
-        """Returns list of QIDs for use in SDC upload"""
-        return [e['id'] for e in self.selected_entities_location]
 
 
 if __name__ == '__main__':
