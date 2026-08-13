@@ -407,11 +407,16 @@ class UploaderWindow(QMainWindow):
         
         menu_bar = self.menuBar()
         file_menu = menu_bar.addMenu("&File")
+             
+        tutorial_action = QAction("Tutorial", self)
+        tutorial_action.triggered.connect(self.show_tutorial)   
+        
         exit_action = QAction("&Exit", self)
         exit_action.setShortcut(QKeySequence("Ctrl+Q"))
         exit_action.setStatusTip("Exit the application")
         exit_action.triggered.connect(self.close)
         
+        file_menu.addAction(tutorial_action)
         file_menu.addSeparator() # Adds a distinct break line
         file_menu.addAction(exit_action)
         
@@ -653,7 +658,10 @@ class UploaderWindow(QMainWindow):
         self.camera_location_lat=lat
         self.camera_location_lon=lon
 
-
+    def show_tutorial(self):
+        # Используем импортированный класс
+        self.wizard = TutorialWizard()
+        self.wizard.show() #exec for modal, show for non-modal
         
     def on_preset_tab_change(self, index):
         if index==0:
