@@ -15,6 +15,8 @@ from PyQt6.QtWebEngineWidgets import QWebEngineView
 from PyQt6.QtWebEngineCore import QWebEnginePage
 from PyQt6.QtWebChannel import QWebChannel
 
+
+
 from tutorial import TutorialWizard 
  
 import mwclient
@@ -607,10 +609,7 @@ class UploaderWindow(QMainWindow):
         
         right_layout.addWidget(self.tab_presets)
         
-        
-        self.gen_desc_btn = QPushButton('Generate Description', self)
-        self.gen_desc_btn.clicked.connect(self.generate_description)
-        right_layout.addWidget(self.gen_desc_btn)
+
 
         right_layout.addWidget(QLabel("File name on Wikimedia Commons:"))
         self.filename_input = QLineEdit(self)
@@ -672,10 +671,11 @@ class UploaderWindow(QMainWindow):
         
         self.upload_btn.setEnabled(False)
 
-    def desc_buttons_enable(self):
+    def on_generation_finish(self):
         for button in self.gen_desc_buttons.values():
             button.setEnabled(True)
         self.upload_btn.setEnabled(True)
+        QApplication.restoreOverrideCursor()
                         
     def show_tutorial(self):
         self.wizard = TutorialWizard()
@@ -769,6 +769,10 @@ class UploaderWindow(QMainWindow):
             return
         # Disable the button to prevent multiple concurrent generations
         self.desc_buttons_disable()
+
+        
+        # Start the animation
+        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
         self.log_output.append("Generating description...")
 
         # Initialize the background thread
@@ -787,7 +791,7 @@ class UploaderWindow(QMainWindow):
         self.desc_thread.log_signal.connect(self.log_output.append)
         
         # Re-enable the button when the thread finishes execution
-        self.desc_thread.finished.connect(self.desc_buttons_enable)
+        self.desc_thread.finished.connect(self.on_generation_finish)
         
         # Launch the thread
         self.desc_thread.start()
