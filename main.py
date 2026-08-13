@@ -505,6 +505,7 @@ class UploaderWindow(QMainWindow):
         tab_preset_thing = QWidget()
         layout_preset_thing = QVBoxLayout()
 
+        layout_preset_thing.addWidget(QLabel("Name (optional)"))
         self.preset_thing_name = QLineEdit()
         layout_preset_thing.addWidget(self.preset_thing_name)
         self.preset_thing_name.setStyleSheet(self.css_textedit)
