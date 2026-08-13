@@ -477,6 +477,8 @@ class UploaderWindow(QMainWindow):
         left_layout.addLayout(self.labels_layout)
 
 
+        self.gen_desc_buttons=dict()
+
 
         # RIGHT HALF
         right_layout = QVBoxLayout()
@@ -491,9 +493,9 @@ class UploaderWindow(QMainWindow):
         self.preset_place_depicts = WikidataSearchWidget( placeholder_text="Search for place...",title="Wikidata entities for depicts (optional)")
         layout_preset_place.addWidget(self.preset_place_depicts)
         
-        self.gen_desc_btn_preset_01 = QPushButton('Generate Description: Place', self)
-        self.gen_desc_btn_preset_01.clicked.connect(self.generate_description)
-        layout_preset_place.addWidget(self.gen_desc_btn_preset_01)
+        self.gen_desc_buttons['preset_place'] = QPushButton('Generate Description: Place', self)
+        self.gen_desc_buttons['preset_place'].clicked.connect(self.generate_description)
+        layout_preset_place.addWidget(self.gen_desc_buttons['preset_place'])
         tab_preset_place.setLayout(layout_preset_place)
 
 
@@ -509,9 +511,9 @@ class UploaderWindow(QMainWindow):
         self.preset_thing_place = WikidataSearchWidget( placeholder_text="Search for place...",title="Place entity: Street, town, museum, event")
         layout_preset_thing.addWidget(self.preset_thing_place)
         
-        self.gen_desc_btn_preset_thing = QPushButton('Generate Description: Object In Place', self)
-        self.gen_desc_btn_preset_thing.clicked.connect(self.generate_description)
-        layout_preset_thing.addWidget(self.gen_desc_btn_preset_thing)
+        self.gen_desc_buttons['preset_thing'] = QPushButton('Generate Description: Object In Place', self)
+        self.gen_desc_buttons['preset_thing'].clicked.connect(self.generate_description)
+        layout_preset_thing.addWidget(self.gen_desc_buttons['preset_thing'])
         tab_preset_thing.setLayout(layout_preset_thing)
         
         
@@ -535,9 +537,9 @@ class UploaderWindow(QMainWindow):
         layout_preset_03.addWidget(self.preset_03_housenumber)
         self.preset_03_housenumber.setStyleSheet(self.css_textedit)
         
-        self.gen_desc_btn_preset_03 = QPushButton('Generate Description: Building/Address on street', self)
-        self.gen_desc_btn_preset_03.clicked.connect(self.generate_description)
-        layout_preset_03.addWidget(self.gen_desc_btn_preset_03)
+        self.gen_desc_buttons['preset_03'] = QPushButton('Generate Description: Building/Address on street', self)
+        self.gen_desc_buttons['preset_03'].clicked.connect(self.generate_description)
+        layout_preset_03.addWidget(self.gen_desc_buttons['preset_03'])
         tab_preset_03.setLayout(layout_preset_03)
 
 
@@ -569,9 +571,9 @@ class UploaderWindow(QMainWindow):
         layout_preset_automobile.addWidget(self.preset_automobile_registration)
         self.preset_automobile_registration.setStyleSheet(self.css_textedit)
         
-        self.gen_desc_btn_preset_automobile = QPushButton('Generate Description: Automobile', self)
-        self.gen_desc_btn_preset_automobile.clicked.connect(self.generate_description)
-        layout_preset_automobile.addWidget(self.gen_desc_btn_preset_automobile)
+        self.gen_desc_buttons['preset_automobile'] = QPushButton('Generate Description: Automobile', self)
+        self.gen_desc_buttons['preset_automobile'].clicked.connect(self.generate_description)
+        layout_preset_automobile.addWidget(self.gen_desc_buttons['preset_automobile'])
         tab_preset_automobile.setLayout(layout_preset_automobile)
 
         # tab group
@@ -661,6 +663,20 @@ class UploaderWindow(QMainWindow):
         self.camera_location_lat=lat
         self.camera_location_lon=lon
 
+    def desc_buttons_disable(self):
+
+        self.gen_desc_buttons['preset_place'].setEnabled(False)
+        self.gen_desc_buttons['preset_thing'].setEnabled(False)
+        self.gen_desc_buttons['preset_03'].setEnabled(False)
+        self.gen_desc_buttons['preset_automobile'].setEnabled(False)
+        
+        self.upload_btn.setEnabled(False)
+
+    def desc_buttons_enable(self):
+        for button in self.gen_desc_buttons.values():
+            button.setEnabled(True)
+        self.upload_btn.setEnabled(True)
+                        
     def show_tutorial(self):
         self.wizard = TutorialWizard()
         self.wizard.show() #exec for modal, show for non-modal
@@ -752,7 +768,7 @@ class UploaderWindow(QMainWindow):
         if is_invalid_input:
             return
         # Disable the button to prevent multiple concurrent generations
-        self.gen_desc_btn.setEnabled(False)
+        self.desc_buttons_disable()
         self.log_output.append("Generating description...")
 
         # Initialize the background thread
@@ -771,7 +787,7 @@ class UploaderWindow(QMainWindow):
         self.desc_thread.log_signal.connect(self.log_output.append)
         
         # Re-enable the button when the thread finishes execution
-        self.desc_thread.finished.connect(lambda: self.gen_desc_btn.setEnabled(True))
+        self.desc_thread.finished.connect(self.desc_buttons_enable)
         
         # Launch the thread
         self.desc_thread.start()
