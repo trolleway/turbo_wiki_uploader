@@ -6,9 +6,9 @@ from PyQt6.QtCore import Qt
 class WelcomePage(QWizardPage):
     def __init__(self):
         super().__init__()
-        self.setTitle("Добро пожаловать!")
+        self.setTitle("Welcome!")
         layout = QVBoxLayout()
-        label = QLabel("Этот мастер поможет вам разобраться с функциями программы.")
+        label = QLabel("This tutorial will show you how to use uploader. You can show this tutorial from File --> Tutorial")
         label.setWordWrap(True)
         layout.addWidget(label)
         self.setLayout(layout)
@@ -18,7 +18,7 @@ class PageLogin(QWizardPage):
         super().__init__()
         self.setTitle("Log In")
         layout = QVBoxLayout()
-        text_label = QLabel("Enter your Wikimedia Commons credentials in the Username and Password fields located at the top-left corner of the window.")
+        text_label = QLabel("Enter your Wikimedia Commons credentials in the <strong>Username</strong> and <strong>Password</strong> fields located at the top-left corner of the window.")
         text_label.setWordWrap(True)
         layout.addWidget(text_label)
         '''
@@ -37,7 +37,7 @@ class PageSelectFile(QWizardPage):
         super().__init__()
         self.setTitle("Select Your Photo")
         layout = QVBoxLayout()
-        txt='''Click Select Photo and choose a JPEG file.
+        txt='''Click <strong>Select Photo</strong> and choose a JPEG file.
 <p>Requirements: The photo must contain EXIF geolocation data (coordinates) to ensure it appears correctly on maps. It also requires an original capture date.</p>
 <p>Tip: If your photo lacks coordinates, you can add them using tools like GeoSetter or Rasklad Geotag.</p>
 <p>Quality: Always upload original, full-resolution files. Do not resize them.</p>
@@ -81,7 +81,7 @@ class PageWikidata(QWizardPage):
         self.setTitle("Link to Wikidata")
         layout = QVBoxLayout()
         txt='''After selecting your image and preset (e.g., Geographic Object or Object in Place), enter the object type and location name in the respective fields.
-A list of matching Wikidata items will appear.Click on the correct item to link it to your upload.
+A list of matching <strong>Wikidata items</strong> will appear. Click on the correct item to link it to your image.
 '''
         text_label = QLabel()
         text_label.setTextFormat(Qt.TextFormat.RichText)
@@ -96,12 +96,11 @@ class PageUpload(QWizardPage):
         super().__init__()
         self.setTitle("Generate description and upload file")
         layout = QVBoxLayout()
-        txt='''Click the Generate Description button.
+        txt='''Click the <strong>Generate Description</strong> button.
 The tool will automatically search for existing Wikimedia Commons categories and generate a file name and description text.
 Review the generated text and categories; you can manually edit them if necessary.
-<p>
-Click Upload to finish.
-Once the upload is successful, the local file will be moved to a commons_uploaded subfolder on your disk to help you keep track of processed files.
+<p>Click <strong>Upload</strong> to finish.</p>
+<p>Once the upload is successful, the local file will be moved to a <pre>commons_uploaded</pre> subfolder on your disk to help you keep track of processed files.
 '''
         text_label = QLabel()
         text_label.setTextFormat(Qt.TextFormat.RichText)
@@ -112,10 +111,9 @@ Once the upload is successful, the local file will be moved to a commons_uploade
         self.setLayout(layout)
                         
 class TutorialWizard(QWizard):
-    """Главный класс туториала, который мы будем импортировать"""
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Руководство пользователя")
+        self.setWindowTitle("Tutorial")
         self.addPage(WelcomePage())
         self.addPage(PageLogin())
         self.addPage(PageSelectFile())

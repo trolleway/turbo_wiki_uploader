@@ -2,7 +2,7 @@ import sys
 import datetime
 from PyQt6.QtWidgets import (QApplication, QWidget, QVBoxLayout, QLabel, 
                              QLineEdit, QPushButton, QFileDialog, QTextEdit, QListWidget, QListWidgetItem, 
-                             QAbstractItemView, QMessageBox, QHBoxLayout,QTabWidget,QMainWindow)
+                             QTextBrowser, QMessageBox, QHBoxLayout,QTabWidget,QMainWindow)
 
 from PyQt6.QtWebChannel import QWebChannel
 from PyQt6.QtCore import QThread, QTimer, QObject, pyqtSlot, pyqtSignal, QEvent
@@ -24,6 +24,7 @@ from exif_helper import ExifReader
 import requests
 import os
 import shutil
+import html
 
 from PyQt6.QtCore import QSettings
 
@@ -158,7 +159,8 @@ class UploadThread(QThread):
 
             self.log_signal.emit("Done.")
             url="https://commons.wikimedia.org/wiki/File:"+self.file_name
-            self.log_signal.emit(f'<a href="{url}">{url}</a>')
+            safe_url = html.escape(url)
+            self.log_signal.emit(f'<a href="{safe_url}">{url}</a>')
             self.finished_signal.emit(True)
 
         except Exception as e:
@@ -637,7 +639,8 @@ class UploaderWindow(QMainWindow):
         right_layout.addWidget(self.upload_btn)
         
         
-        self.log_output = QTextEdit(self)
+        self.log_output = QTextBrowser(self)
+        self.log_output.setOpenExternalLinks(True)
         self.log_output.setReadOnly(True)
         right_layout.addWidget(self.log_output)
 
@@ -659,7 +662,6 @@ class UploaderWindow(QMainWindow):
         self.camera_location_lon=lon
 
     def show_tutorial(self):
-        # Используем импортированный класс
         self.wizard = TutorialWizard()
         self.wizard.show() #exec for modal, show for non-modal
         
@@ -862,5 +864,13 @@ class UploaderWindow(QMainWindow):
 if __name__ == '__main__':
     app = QApplication(sys.argv)
     window = UploaderWindow()
+    settings = QSettings(ORG_NAME, APP_NAME)
+    is_first_run = settings.value("first_run", True, type=bool)
     window.show()
+    # Show tutorial on first run after window is drawn
+    if is_first_run:
+        # Mark as not first run to prevent showing again
+        settings.setValue("first_run", False)
+        # Use QTimer to show tutorial after main window display
+        QTimer.singleShot(100, window.show_tutorial)  # 100ms delay
     sys.exit(app.exec())
