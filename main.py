@@ -2,18 +2,20 @@ import sys
 import datetime
 from PyQt6.QtWidgets import (QApplication, QWidget, QVBoxLayout, QLabel, 
                              QLineEdit, QPushButton, QFileDialog, QTextEdit, QListWidget, QListWidgetItem, 
-                             QAbstractItemView, QMessageBox, QHBoxLayout,QTabWidget)
+                             QAbstractItemView, QMessageBox, QHBoxLayout,QTabWidget,QMainWindow)
 
 from PyQt6.QtWebChannel import QWebChannel
 from PyQt6.QtCore import QThread, QTimer, QObject, pyqtSlot, pyqtSignal, QEvent
 from PyQt6.QtGui import QPixmap
 from PyQt6.QtCore import Qt,QUrl,pyqtSlot
+from PyQt6.QtGui import QAction, QKeySequence
 
 
 from PyQt6.QtWebEngineWidgets import QWebEngineView
 from PyQt6.QtWebEngineCore import QWebEnginePage
 from PyQt6.QtWebChannel import QWebChannel
 
+from tutorial import TutorialWizard 
  
 import mwclient
 import keyring
@@ -156,7 +158,7 @@ class UploadThread(QThread):
 
             self.log_signal.emit("Done.")
             url="https://commons.wikimedia.org/wiki/File:"+self.file_name
-            self.log_signal.emit(f'<a href="{url}">{url}')
+            self.log_signal.emit(f'<a href="{url}">{url}</a>')
             self.finished_signal.emit(True)
 
         except Exception as e:
@@ -378,7 +380,7 @@ class WikidataSearcher(QThread):
 
             self.error_occurred.emit(str(e))
             
-class UploaderWindow(QWidget):
+class UploaderWindow(QMainWindow):
     def __init__(self):
         super().__init__()
 
@@ -403,6 +405,16 @@ class UploaderWindow(QWidget):
         self.setMinimumSize(1000, 700)
         self.showMaximized()
         
+        menu_bar = self.menuBar()
+        file_menu = menu_bar.addMenu("&File")
+        exit_action = QAction("&Exit", self)
+        exit_action.setShortcut(QKeySequence("Ctrl+Q"))
+        exit_action.setStatusTip("Exit the application")
+        exit_action.triggered.connect(self.close)
+        
+        file_menu.addSeparator() # Adds a distinct break line
+        file_menu.addAction(exit_action)
+        
         main_layout = QHBoxLayout()
         left_layout = QVBoxLayout()
         
@@ -416,7 +428,9 @@ class UploaderWindow(QWidget):
         self.pass_input.setPlaceholderText('Password')
         self.pass_input.setEchoMode(QLineEdit.EchoMode.Password)
         left_layout.addWidget(self.pass_input)
-
+        self.license_label = QLabel('File will be uploaded under cc-by-4.0 license')
+        left_layout.addWidget(self.license_label)
+        
         self.file_btn = QPushButton('Select Photo', self)
         self.file_btn.clicked.connect(self.select_file)
         left_layout.addWidget(self.file_btn)
@@ -461,30 +475,21 @@ class UploaderWindow(QWidget):
         right_layout = QVBoxLayout()
         
         # tab1
-        tab_preset_01 = QWidget()
-        layout_preset_01 = QVBoxLayout()
-        layout_preset_01.addWidget(QLabel("Geographic object: building, street, station"))
+        tab_preset_place = QWidget()
+        layout_preset_place = QVBoxLayout()
+        layout_preset_place.addWidget(QLabel("Geographic object: building, street, station"))
+        
+        self.preset_place_place = WikidataSearchWidget( placeholder_text="Search for depicts...",title="Wikidata entity for place: Street, town, museum, event")
+        layout_preset_place.addWidget(self.preset_place_place)
+        self.preset_place_depicts = WikidataSearchWidget( placeholder_text="Search for place...",title="Wikidata entities for depicts (optional)")
+        layout_preset_place.addWidget(self.preset_place_depicts)
+        
         self.gen_desc_btn_preset_01 = QPushButton('Generate Description: Place', self)
         self.gen_desc_btn_preset_01.clicked.connect(self.generate_description)
-        layout_preset_01.addWidget(self.gen_desc_btn_preset_01)
-        tab_preset_01.setLayout(layout_preset_01)
+        layout_preset_place.addWidget(self.gen_desc_btn_preset_01)
+        tab_preset_place.setLayout(layout_preset_place)
 
-        # tab2
-        '''
-        tab_preset_02 = QWidget()
-        layout_preset_02 = QVBoxLayout()
-        layout_preset_02.addWidget(QLabel("Object in museum, object in city"))
-        layout_preset_02.addWidget(QLabel("App will search for most suitable categories"))
-        layout_preset_02.addWidget(QLabel("Name of object (optional):"))
-        self.preset_02_object_name = QLineEdit()
-        layout_preset_02.addWidget(self.preset_02_object_name)
-        self.preset_02_object_name.setStyleSheet(self.css_textedit)
-        
-        self.gen_desc_btn_preset_02 = QPushButton('Generate Description: Object In Place', self)
-        self.gen_desc_btn_preset_02.clicked.connect(self.generate_description)
-        layout_preset_02.addWidget(self.gen_desc_btn_preset_02)
-        tab_preset_02.setLayout(layout_preset_02)
-        '''
+
         # thing in place
         tab_preset_thing = QWidget()
         layout_preset_thing = QVBoxLayout()
@@ -492,7 +497,7 @@ class UploaderWindow(QWidget):
         self.preset_thing_name = QLineEdit()
         layout_preset_thing.addWidget(self.preset_thing_name)
         self.preset_thing_name.setStyleSheet(self.css_textedit)
-        self.preset_thing_depicts = WikidataSearchWidget( placeholder_text="Search for depicts...",title="Depicts (building, appartment building, shop):")
+        self.preset_thing_depicts = WikidataSearchWidget( placeholder_text="Search for depicts...",title="Depicts (building, apartment building, shop):")
         layout_preset_thing.addWidget(self.preset_thing_depicts)
         self.preset_thing_place = WikidataSearchWidget( placeholder_text="Search for place...",title="Place entity: Street, town, museum, event")
         layout_preset_thing.addWidget(self.preset_thing_place)
@@ -566,7 +571,7 @@ class UploaderWindow(QWidget):
         self.label_preset_select = QLabel("Preset:")
         right_layout.addWidget(self.label_preset_select)
         self.tab_presets = QTabWidget()
-        self.tab_presets.addTab(tab_preset_01, "Geographic object")
+        self.tab_presets.addTab(tab_preset_place, "Geographic object")
         #self.tab_presets.addTab(tab_preset_02, "Object in place 0")
         self.tab_presets.addTab(tab_preset_thing, "Object in place")
         self.tab_presets.addTab(tab_preset_03, "Building/Address on street")
@@ -637,14 +642,17 @@ class UploaderWindow(QWidget):
 
         main_layout.addLayout(left_layout)
         main_layout.addLayout(right_layout)
-        self.setLayout(main_layout)
-        
+        central_widget = QWidget()
+        central_widget.setLayout(main_layout)
+        self.setCentralWidget(central_widget)
+                
         self.load_credentials()
         
     @pyqtSlot(str, str)
     def update_coordinate_in_app(self, lat, lon):   
         self.camera_location_lat=lat
         self.camera_location_lon=lon
+
 
         
     def on_preset_tab_change(self, index):
@@ -698,6 +706,9 @@ class UploaderWindow(QWidget):
     
     def presets_fields_as_dict(self) -> dict:
         fields={}
+        fields['place_place']=self.preset_place_place.get_selected_qids()
+        fields['place_depicts']=self.preset_place_depicts.get_selected_qids()
+        
         fields['thing_name']=self.preset_thing_name.text()
         fields['thing_place']=self.preset_thing_place.get_selected_qids()
         fields['thing_depicts']=self.preset_thing_depicts.get_selected_qids()        

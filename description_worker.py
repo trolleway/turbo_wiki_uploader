@@ -111,37 +111,60 @@ class DescriptionGenerationThread(QThread):
             ext = os.path.splitext(self.file_path)[1]
             export_depicts = list()
             wdobj_dict = dict()
+            
             if self.preset=='place':
-                #categories
                 categories=list()
                 categories_text=''
-                category_for_location_needed = True
-                for wdobj in wdobj_dict.values():
-                    categories.append(self.wdobj_category(wdobj))
-        
-                categories.append(self.wdobj_category(location_wdobj) )
+
+                
+                place_wdobj = self.get_wikidata_object(self.preset_fields.get('place_place','')[0])
+                
+                                
+
+                if self.check_wdobj_have_adm_loc(place_wdobj) == False: description_failed = True
+                if self.check_wdobj_have_labels(place_wdobj) == False: description_failed = True
+                #if self.check_wdobj_have_labels(depicts_wdobj) == False: description_failed = True                
+                
+                                
+                export_depicts.append(place_wdobj['id'])
+                categories.append(self.wdobj_category(place_wdobj) )
+                
+                for wdid in self.preset_fields.get('place_depicts',[]):
+                    wdobj=self.get_wikidata_object(wdid)
+                    category = self.get_category_for_object_in_location(wdobj,place_wdobj)
+                    if category is None:
+                        category = self.wdobj_category(wdobj)
+                    
+                    export_depicts.append(wdobj['id'])    
+                    
+                    self.log_signal.emit(category)
+                    if category is not None:
+                        if 'Category:' not in category:
+                            category = 'Category:'+category
+                        categories.append(category)
+
+                
+
                 categories = [x for x in categories if x is not None]
                 categories = [f"[[{item}]]\n" for item in categories]
                 categories = list(set(categories))
                 
                 if len(categories)>0:
-                    categories_text="\n".join(categories)
-                    
-                ls=list()
-                for wikidata_id in self.wikidata_ids:
-                    ls.append(wdobj_dict[wikidata_id]['labels']['en']['value'])    
-                if location_wdobj['labels']['en']['value'] in ls:
-                    l=''
-                else:
-                    l=location_wdobj['labels']['en']['value']
-                    
-                commons_filename = l + ' ' + ls[0]+' '+timestamp2+ext
-                commons_filename = commons_filename.strip()
+                    categories_text="\n".join(categories)  
+                
 
-                short_description = ' '.join(ls) + ' ' + l
-                export_place_of_creation_wdid = location_wdobj['id']
-                for wdobj in wdobj_dict.values():
-                    export_depicts.append(wdobj['id'])
+                ls=list()
+                for wikidata_id in self.preset_fields.get('thing_depicts'):
+                    wdobj_dict[wikidata_id]=self.get_wikidata_object(wikidata_id)
+                    if self.check_wdobj_have_labels(wdobj_dict[wikidata_id]) == False: description_failed = True
+                    ls.append(wdobj_dict[wikidata_id]['labels']['en']['value'])
+                
+                objectname = place_wdobj['labels']['en']['value']
+                commons_filename = f"{objectname} {timestamp2}{ext}"
+                short_description = objectname        
+                commons_filename = commons_filename.strip()
+                
+                export_place_of_creation_wdid = place_wdobj['id']
 
 
             
