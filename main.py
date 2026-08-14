@@ -422,7 +422,7 @@ class UploaderWindow(QMainWindow):
         self.preset = 'place'
 
     def initUI(self):
-        self.setWindowTitle('Wikimedia Commons Uploader (PyQt6 + mwclient)')
+        self.setWindowTitle('Turbo Wiki Uploader')
         self.resize(900, 600) 
         #self.setGeometry(100, 100, 800, 600)
         self.setMinimumSize(1000, 700)
