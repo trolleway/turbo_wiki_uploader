@@ -205,11 +205,17 @@ def import_json(d):
 
 class JavaScriptHandler(QObject):
     coordinatesUpdated = pyqtSignal(str, str)
+    mapMoved = pyqtSignal(str, str, int)
     
     @pyqtSlot(str, str)
     def coordinatesUpdatedSlot(self, lat, lng):
         self.coordinatesUpdated.emit(lat, lng)
-
+        
+        
+    @pyqtSlot(str, str, int)
+    def mapMovedSlot(self, lat, lng, zoom):
+        self.mapMoved.emit(lat, lng, zoom)
+        
 class CustomWebEnginePage(QWebEnginePage):
     def javaScriptConsoleMessage(self, level, message, line_number, source_id):
         print(f"JavaScript console message: {message} (line: {line_number})")
@@ -311,6 +317,19 @@ class MapWidget(QWebEngineView):
                 function setMapView(position, zoom) {
                     map.setView(position, zoom);
                 }
+                
+                map.on('moveend', function(e) {
+                var center = map.getCenter();
+                var zoom = map.getZoom();
+                if (window.jsHandler) {
+                    window.jsHandler.mapMovedSlot(
+                        center.lat.toFixed(3),
+                        center.lng.toFixed(3),
+                        zoom
+                    );
+                }
+            });
+            
             </script>
         </body>
         </html>
@@ -463,11 +482,16 @@ class UploaderWindow(QMainWindow):
         self.map_widget.jsHandler.coordinatesUpdated.connect(
             self.update_coordinate_in_app
         )
+        self.map_widget.jsHandler.mapMoved.connect(self.update_map_link)
         
         self.labels_layout=QHBoxLayout()
         self.file_label = QLabel('No file selected', self)
         self.labels_layout.addWidget(self.file_label)
         
+        self.wikidata_link_label = QLabel('', self)
+        self.wikidata_link_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.wikidata_link_label.setOpenExternalLinks(True)
+        self.labels_layout.addWidget(self.wikidata_link_label)
         
         # Hyperlink label (Simple text link)
         self.link_label = QLabel('', self)
@@ -552,7 +576,7 @@ class UploaderWindow(QMainWindow):
         layout_preset_automobileh = QHBoxLayout()
         layout_preset_automobileh2 = QHBoxLayout()
 
-        layout_preset_automobile.addWidget(QLabel("Automobile on street or in museum. Categories: 'automobiles in location', 'automobile model'"))
+        layout_preset_automobile.addWidget(QLabel("Automobile on street or in museum."))
         self.preset_automobile_cityid = WikidataSearchWidget( placeholder_text="Search for city...",title="City wikidata entity:")
         layout_preset_automobileh.addWidget(self.preset_automobile_cityid)
         self.preset_automobile_place = WikidataSearchWidget( placeholder_text="Search for street...",title="Street or place wikidata entity:")
@@ -682,6 +706,14 @@ class UploaderWindow(QMainWindow):
         self.wizard = TutorialWizard()
         self.wizard.show() #exec for modal, show for non-modal
         
+    def update_map_link(self, lat, lon, zoom):
+        """Update the link label with Wikishootme URL when map moves."""
+        url = f"https://wikishootme.toolforge.org/#lat={lat}&lng={lon}&zoom={zoom}&layers=wikidata_image,wikidata_no_image"
+        # Update the link label with the new URL
+        self.wikidata_link_label.setText(f'<a href="{url}" style="color: #0066cc; text-decoration: underline;">Wikidata objects on Wikishootme map at this location</a>')
+        # Store the current URL for potential use elsewhere
+        self.current_map_url = url
+            
     def on_preset_tab_change(self, index):
         if index==0:
             self.preset = 'place'
@@ -704,8 +736,8 @@ class UploaderWindow(QMainWindow):
             self.file_label.setText(fname.split('/')[-1])
 
             # Auto-suggest filename
-            if not self.filename_input.text():
-                self.filename_input.setText(fname.split('/')[-1])
+            #if not self.filename_input.text():
+            #    self.filename_input.setText(fname.split('/')[-1])
             # If a file was selected, display it
         
             pixmap = QPixmap(self.file_path)    
