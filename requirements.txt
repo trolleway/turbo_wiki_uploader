@@ -6,3 +6,4 @@ exif
 keyring
 mwclient
 PyQt6-WebEngine==6.7.0
+#pyqtwaitingspinner

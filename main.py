@@ -2,18 +2,22 @@ import sys
 import datetime
 from PyQt6.QtWidgets import (QApplication, QWidget, QVBoxLayout, QLabel, 
                              QLineEdit, QPushButton, QFileDialog, QTextEdit, QListWidget, QListWidgetItem, 
-                             QAbstractItemView, QMessageBox, QHBoxLayout,QTabWidget)
+                             QTextBrowser, QMessageBox, QHBoxLayout,QTabWidget,QMainWindow)
 
 from PyQt6.QtWebChannel import QWebChannel
 from PyQt6.QtCore import QThread, QTimer, QObject, pyqtSlot, pyqtSignal, QEvent
 from PyQt6.QtGui import QPixmap
 from PyQt6.QtCore import Qt,QUrl,pyqtSlot
+from PyQt6.QtGui import QAction, QKeySequence
 
 
 from PyQt6.QtWebEngineWidgets import QWebEngineView
 from PyQt6.QtWebEngineCore import QWebEnginePage
 from PyQt6.QtWebChannel import QWebChannel
 
+
+
+from tutorial import TutorialWizard 
  
 import mwclient
 import keyring
@@ -22,6 +26,7 @@ from exif_helper import ExifReader
 import requests
 import os
 import shutil
+import html
 
 from PyQt6.QtCore import QSettings
 
@@ -156,7 +161,8 @@ class UploadThread(QThread):
 
             self.log_signal.emit("Done.")
             url="https://commons.wikimedia.org/wiki/File:"+self.file_name
-            self.log_signal.emit(f'<a href="{url}">{url}')
+            safe_url = html.escape(url)
+            self.log_signal.emit(f'<a href="{safe_url}">{url}</a>')
             self.finished_signal.emit(True)
 
         except Exception as e:
@@ -199,11 +205,17 @@ def import_json(d):
 
 class JavaScriptHandler(QObject):
     coordinatesUpdated = pyqtSignal(str, str)
+    mapMoved = pyqtSignal(str, str, int)
     
     @pyqtSlot(str, str)
     def coordinatesUpdatedSlot(self, lat, lng):
         self.coordinatesUpdated.emit(lat, lng)
-
+        
+        
+    @pyqtSlot(str, str, int)
+    def mapMovedSlot(self, lat, lng, zoom):
+        self.mapMoved.emit(lat, lng, zoom)
+        
 class CustomWebEnginePage(QWebEnginePage):
     def javaScriptConsoleMessage(self, level, message, line_number, source_id):
         print(f"JavaScript console message: {message} (line: {line_number})")
@@ -305,6 +317,19 @@ class MapWidget(QWebEngineView):
                 function setMapView(position, zoom) {
                     map.setView(position, zoom);
                 }
+                
+                map.on('moveend', function(e) {
+                var center = map.getCenter();
+                var zoom = map.getZoom();
+                if (window.jsHandler) {
+                    window.jsHandler.mapMovedSlot(
+                        center.lat.toFixed(3),
+                        center.lng.toFixed(3),
+                        zoom
+                    );
+                }
+            });
+            
             </script>
         </body>
         </html>
@@ -378,7 +403,7 @@ class WikidataSearcher(QThread):
 
             self.error_occurred.emit(str(e))
             
-class UploaderWindow(QWidget):
+class UploaderWindow(QMainWindow):
     def __init__(self):
         super().__init__()
 
@@ -403,6 +428,21 @@ class UploaderWindow(QWidget):
         self.setMinimumSize(1000, 700)
         self.showMaximized()
         
+        menu_bar = self.menuBar()
+        file_menu = menu_bar.addMenu("&File")
+             
+        tutorial_action = QAction("Tutorial", self)
+        tutorial_action.triggered.connect(self.show_tutorial)   
+        
+        exit_action = QAction("&Exit", self)
+        exit_action.setShortcut(QKeySequence("Ctrl+Q"))
+        exit_action.setStatusTip("Exit the application")
+        exit_action.triggered.connect(self.close)
+        
+        file_menu.addAction(tutorial_action)
+        file_menu.addSeparator() # Adds a distinct break line
+        file_menu.addAction(exit_action)
+        
         main_layout = QHBoxLayout()
         left_layout = QVBoxLayout()
         
@@ -416,7 +456,9 @@ class UploaderWindow(QWidget):
         self.pass_input.setPlaceholderText('Password')
         self.pass_input.setEchoMode(QLineEdit.EchoMode.Password)
         left_layout.addWidget(self.pass_input)
-
+        self.license_label = QLabel('File will be uploaded under cc-by-4.0 license')
+        left_layout.addWidget(self.license_label)
+        
         self.file_btn = QPushButton('Select Photo', self)
         self.file_btn.clicked.connect(self.select_file)
         left_layout.addWidget(self.file_btn)
@@ -440,11 +482,16 @@ class UploaderWindow(QWidget):
         self.map_widget.jsHandler.coordinatesUpdated.connect(
             self.update_coordinate_in_app
         )
+        self.map_widget.jsHandler.mapMoved.connect(self.update_map_link)
         
         self.labels_layout=QHBoxLayout()
         self.file_label = QLabel('No file selected', self)
         self.labels_layout.addWidget(self.file_label)
         
+        self.wikidata_link_label = QLabel('', self)
+        self.wikidata_link_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.wikidata_link_label.setOpenExternalLinks(True)
+        self.labels_layout.addWidget(self.wikidata_link_label)
         
         # Hyperlink label (Simple text link)
         self.link_label = QLabel('', self)
@@ -456,50 +503,44 @@ class UploaderWindow(QWidget):
         left_layout.addLayout(self.labels_layout)
 
 
+        self.gen_desc_buttons=dict()
+
 
         # RIGHT HALF
         right_layout = QVBoxLayout()
         
         # tab1
-        tab_preset_01 = QWidget()
-        layout_preset_01 = QVBoxLayout()
-        layout_preset_01.addWidget(QLabel("Geographic object: building, street, station"))
-        self.gen_desc_btn_preset_01 = QPushButton('Generate Description: Place', self)
-        self.gen_desc_btn_preset_01.clicked.connect(self.generate_description)
-        layout_preset_01.addWidget(self.gen_desc_btn_preset_01)
-        tab_preset_01.setLayout(layout_preset_01)
-
-        # tab2
-        '''
-        tab_preset_02 = QWidget()
-        layout_preset_02 = QVBoxLayout()
-        layout_preset_02.addWidget(QLabel("Object in museum, object in city"))
-        layout_preset_02.addWidget(QLabel("App will search for most suitable categories"))
-        layout_preset_02.addWidget(QLabel("Name of object (optional):"))
-        self.preset_02_object_name = QLineEdit()
-        layout_preset_02.addWidget(self.preset_02_object_name)
-        self.preset_02_object_name.setStyleSheet(self.css_textedit)
+        tab_preset_place = QWidget()
+        layout_preset_place = QVBoxLayout()
+        layout_preset_place.addWidget(QLabel("Geographic object: building, street, station"))
         
-        self.gen_desc_btn_preset_02 = QPushButton('Generate Description: Object In Place', self)
-        self.gen_desc_btn_preset_02.clicked.connect(self.generate_description)
-        layout_preset_02.addWidget(self.gen_desc_btn_preset_02)
-        tab_preset_02.setLayout(layout_preset_02)
-        '''
+        self.preset_place_place = WikidataSearchWidget( placeholder_text="Search for depicts...",title="Wikidata entity for place: Street, town, museum, event")
+        layout_preset_place.addWidget(self.preset_place_place)
+        self.preset_place_depicts = WikidataSearchWidget( placeholder_text="Search for place...",title="Wikidata entities for depicts (optional)")
+        layout_preset_place.addWidget(self.preset_place_depicts)
+        
+        self.gen_desc_buttons['preset_place'] = QPushButton('Generate Description: Place', self)
+        self.gen_desc_buttons['preset_place'].clicked.connect(self.generate_description)
+        layout_preset_place.addWidget(self.gen_desc_buttons['preset_place'])
+        tab_preset_place.setLayout(layout_preset_place)
+
+
         # thing in place
         tab_preset_thing = QWidget()
         layout_preset_thing = QVBoxLayout()
 
+        layout_preset_thing.addWidget(QLabel("Name (optional)"))
         self.preset_thing_name = QLineEdit()
         layout_preset_thing.addWidget(self.preset_thing_name)
         self.preset_thing_name.setStyleSheet(self.css_textedit)
-        self.preset_thing_depicts = WikidataSearchWidget( placeholder_text="Search for depicts...",title="Depicts (building, appartment building, shop):")
+        self.preset_thing_depicts = WikidataSearchWidget( placeholder_text="Search for depicts...",title="Depicts (building, apartment building, shop):")
         layout_preset_thing.addWidget(self.preset_thing_depicts)
         self.preset_thing_place = WikidataSearchWidget( placeholder_text="Search for place...",title="Place entity: Street, town, museum, event")
         layout_preset_thing.addWidget(self.preset_thing_place)
         
-        self.gen_desc_btn_preset_thing = QPushButton('Generate Description: Object In Place', self)
-        self.gen_desc_btn_preset_thing.clicked.connect(self.generate_description)
-        layout_preset_thing.addWidget(self.gen_desc_btn_preset_thing)
+        self.gen_desc_buttons['preset_thing'] = QPushButton('Generate Description: Object In Place', self)
+        self.gen_desc_buttons['preset_thing'].clicked.connect(self.generate_description)
+        layout_preset_thing.addWidget(self.gen_desc_buttons['preset_thing'])
         tab_preset_thing.setLayout(layout_preset_thing)
         
         
@@ -523,9 +564,9 @@ class UploaderWindow(QWidget):
         layout_preset_03.addWidget(self.preset_03_housenumber)
         self.preset_03_housenumber.setStyleSheet(self.css_textedit)
         
-        self.gen_desc_btn_preset_03 = QPushButton('Generate Description: Building/Address on street', self)
-        self.gen_desc_btn_preset_03.clicked.connect(self.generate_description)
-        layout_preset_03.addWidget(self.gen_desc_btn_preset_03)
+        self.gen_desc_buttons['preset_03'] = QPushButton('Generate Description: Building/Address on street', self)
+        self.gen_desc_buttons['preset_03'].clicked.connect(self.generate_description)
+        layout_preset_03.addWidget(self.gen_desc_buttons['preset_03'])
         tab_preset_03.setLayout(layout_preset_03)
 
 
@@ -535,7 +576,7 @@ class UploaderWindow(QWidget):
         layout_preset_automobileh = QHBoxLayout()
         layout_preset_automobileh2 = QHBoxLayout()
 
-        layout_preset_automobile.addWidget(QLabel("Automobile on street or in museum. Categories: 'automobiles in location', 'automobile model'"))
+        layout_preset_automobile.addWidget(QLabel("Automobile on street or in museum."))
         self.preset_automobile_cityid = WikidataSearchWidget( placeholder_text="Search for city...",title="City wikidata entity:")
         layout_preset_automobileh.addWidget(self.preset_automobile_cityid)
         self.preset_automobile_place = WikidataSearchWidget( placeholder_text="Search for street...",title="Street or place wikidata entity:")
@@ -557,16 +598,16 @@ class UploaderWindow(QWidget):
         layout_preset_automobile.addWidget(self.preset_automobile_registration)
         self.preset_automobile_registration.setStyleSheet(self.css_textedit)
         
-        self.gen_desc_btn_preset_automobile = QPushButton('Generate Description: Automobile', self)
-        self.gen_desc_btn_preset_automobile.clicked.connect(self.generate_description)
-        layout_preset_automobile.addWidget(self.gen_desc_btn_preset_automobile)
+        self.gen_desc_buttons['preset_automobile'] = QPushButton('Generate Description: Automobile', self)
+        self.gen_desc_buttons['preset_automobile'].clicked.connect(self.generate_description)
+        layout_preset_automobile.addWidget(self.gen_desc_buttons['preset_automobile'])
         tab_preset_automobile.setLayout(layout_preset_automobile)
 
         # tab group
         self.label_preset_select = QLabel("Preset:")
         right_layout.addWidget(self.label_preset_select)
         self.tab_presets = QTabWidget()
-        self.tab_presets.addTab(tab_preset_01, "Geographic object")
+        self.tab_presets.addTab(tab_preset_place, "Geographic object")
         #self.tab_presets.addTab(tab_preset_02, "Object in place 0")
         self.tab_presets.addTab(tab_preset_thing, "Object in place")
         self.tab_presets.addTab(tab_preset_03, "Building/Address on street")
@@ -593,10 +634,7 @@ class UploaderWindow(QWidget):
         
         right_layout.addWidget(self.tab_presets)
         
-        
-        self.gen_desc_btn = QPushButton('Generate Description', self)
-        self.gen_desc_btn.clicked.connect(self.generate_description)
-        right_layout.addWidget(self.gen_desc_btn)
+
 
         right_layout.addWidget(QLabel("File name on Wikimedia Commons:"))
         self.filename_input = QLineEdit(self)
@@ -627,7 +665,8 @@ class UploaderWindow(QWidget):
         right_layout.addWidget(self.upload_btn)
         
         
-        self.log_output = QTextEdit(self)
+        self.log_output = QTextBrowser(self)
+        self.log_output.setOpenExternalLinks(True)
         self.log_output.setReadOnly(True)
         right_layout.addWidget(self.log_output)
 
@@ -637,8 +676,10 @@ class UploaderWindow(QWidget):
 
         main_layout.addLayout(left_layout)
         main_layout.addLayout(right_layout)
-        self.setLayout(main_layout)
-        
+        central_widget = QWidget()
+        central_widget.setLayout(main_layout)
+        self.setCentralWidget(central_widget)
+                
         self.load_credentials()
         
     @pyqtSlot(str, str)
@@ -646,7 +687,33 @@ class UploaderWindow(QWidget):
         self.camera_location_lat=lat
         self.camera_location_lon=lon
 
+    def desc_buttons_disable(self):
+
+        self.gen_desc_buttons['preset_place'].setEnabled(False)
+        self.gen_desc_buttons['preset_thing'].setEnabled(False)
+        self.gen_desc_buttons['preset_03'].setEnabled(False)
+        self.gen_desc_buttons['preset_automobile'].setEnabled(False)
         
+        self.upload_btn.setEnabled(False)
+
+    def on_generation_finish(self):
+        for button in self.gen_desc_buttons.values():
+            button.setEnabled(True)
+        self.upload_btn.setEnabled(True)
+        QApplication.restoreOverrideCursor()
+                        
+    def show_tutorial(self):
+        self.wizard = TutorialWizard()
+        self.wizard.show() #exec for modal, show for non-modal
+        
+    def update_map_link(self, lat, lon, zoom):
+        """Update the link label with Wikishootme URL when map moves."""
+        url = f"https://wikishootme.toolforge.org/#lat={lat}&lng={lon}&zoom={zoom}&layers=wikidata_image,wikidata_no_image"
+        # Update the link label with the new URL
+        self.wikidata_link_label.setText(f'<a href="{url}" style="color: #0066cc; text-decoration: underline;">Wikidata objects on Wikishootme map at this location</a>')
+        # Store the current URL for potential use elsewhere
+        self.current_map_url = url
+            
     def on_preset_tab_change(self, index):
         if index==0:
             self.preset = 'place'
@@ -669,8 +736,8 @@ class UploaderWindow(QWidget):
             self.file_label.setText(fname.split('/')[-1])
 
             # Auto-suggest filename
-            if not self.filename_input.text():
-                self.filename_input.setText(fname.split('/')[-1])
+            #if not self.filename_input.text():
+            #    self.filename_input.setText(fname.split('/')[-1])
             # If a file was selected, display it
         
             pixmap = QPixmap(self.file_path)    
@@ -698,6 +765,9 @@ class UploaderWindow(QWidget):
     
     def presets_fields_as_dict(self) -> dict:
         fields={}
+        fields['place_place']=self.preset_place_place.get_selected_qids()
+        fields['place_depicts']=self.preset_place_depicts.get_selected_qids()
+        
         fields['thing_name']=self.preset_thing_name.text()
         fields['thing_place']=self.preset_thing_place.get_selected_qids()
         fields['thing_depicts']=self.preset_thing_depicts.get_selected_qids()        
@@ -731,7 +801,11 @@ class UploaderWindow(QWidget):
         if is_invalid_input:
             return
         # Disable the button to prevent multiple concurrent generations
-        self.gen_desc_btn.setEnabled(False)
+        self.desc_buttons_disable()
+
+        
+        # Start the animation
+        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
         self.log_output.append("Generating description...")
 
         # Initialize the background thread
@@ -750,7 +824,7 @@ class UploaderWindow(QWidget):
         self.desc_thread.log_signal.connect(self.log_output.append)
         
         # Re-enable the button when the thread finishes execution
-        self.desc_thread.finished.connect(lambda: self.gen_desc_btn.setEnabled(True))
+        self.desc_thread.finished.connect(self.on_generation_finish)
         
         # Launch the thread
         self.desc_thread.start()
@@ -843,5 +917,13 @@ class UploaderWindow(QWidget):
 if __name__ == '__main__':
     app = QApplication(sys.argv)
     window = UploaderWindow()
+    settings = QSettings(ORG_NAME, APP_NAME)
+    is_first_run = settings.value("first_run", True, type=bool)
     window.show()
+    # Show tutorial on first run after window is drawn
+    if is_first_run:
+        # Mark as not first run to prevent showing again
+        settings.setValue("first_run", False)
+        # Use QTimer to show tutorial after main window display
+        QTimer.singleShot(100, window.show_tutorial)  # 100ms delay
     sys.exit(app.exec())
